@@ -352,14 +352,41 @@ return $expectedDigest
 }
 
 function Get-AndroidBuildTools([string]$Root = '') {
-    if (-not $Root) {
-        $sdk = if ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } elseif ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android\sdk' }
-        $Root = Join-Path $sdk 'build-tools'
+    $candidateRoots = @()
+    if ($Root) {
+        $candidateRoots += $Root
+    } else {
+        if ($env:ANDROID_SDK_ROOT) { $candidateRoots += (Join-Path $env:ANDROID_SDK_ROOT 'build-tools') }
+        if ($env:ANDROID_HOME) { $candidateRoots += (Join-Path $env:ANDROID_HOME 'build-tools') }
+        foreach ($repoCand in @($PosRoot, $KeygenRoot)) {
+            if ($repoCand) {
+                $lp = Join-Path $repoCand 'android\local.properties'
+                if (Test-Path -LiteralPath $lp -PathType Leaf) {
+                    foreach ($ln in [IO.File]::ReadAllLines($lp)) {
+                        if ($ln -match '^\s*sdk\.dir\s*=\s*(.+)$') {
+                            $parsedSdk = ($Matches[1].Trim() -replace '\\\\', '\' -replace '\\:', ':')
+                            if ($parsedSdk) { $candidateRoots += (Join-Path $parsedSdk 'build-tools') }
+                        }
+                    }
+                }
+            }
+        }
+        if ($env:USERPROFILE) { $candidateRoots += (Join-Path $env:USERPROFILE 'android-sdk\build-tools') }
+        if ($env:LOCALAPPDATA) { $candidateRoots += (Join-Path $env:LOCALAPPDATA 'Android\sdk\build-tools') }
     }
-    if (-not (Test-Path -LiteralPath $Root -PathType Container)) { throw 'Android SDK build-tools bulunamadi.' }
-    $available = @(Get-ChildItem -LiteralPath $Root -Directory | Where-Object {
-        (Test-Path -LiteralPath (Join-Path $_.FullName 'apksigner.bat')) -and (Test-Path -LiteralPath (Join-Path $_.FullName 'aapt.exe'))
-    } | Sort-Object { [version]($_.Name -replace '-.*$', '') } -Descending)
+    $existingRoots = @($candidateRoots | Select-Object -Unique | Where-Object { Test-Path -LiteralPath $_ -PathType Container -ErrorAction SilentlyContinue })
+    if ($existingRoots.Count -eq 0) { throw 'Android SDK build-tools bulunamadi.' }
+    $available = @()
+    foreach ($btRoot in $existingRoots) {
+        $available += @(Get-ChildItem -LiteralPath $btRoot -Directory -ErrorAction SilentlyContinue | Where-Object {
+            $ok = $false
+            try {
+                $ok = (Test-Path -LiteralPath (Join-Path $_.FullName 'apksigner.bat') -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath (Join-Path $_.FullName 'aapt.exe') -ErrorAction SilentlyContinue)
+            } catch { $ok = $false }
+            $ok
+        })
+    }
+    $available = @($available | Sort-Object { [version]($_.Name -replace '-.*$', '') } -Descending)
     if ($available.Count -eq 0) { throw 'aapt ve apksigner zorunludur; APK denetimi atlanamaz.' }
     return [pscustomobject]@{ Signer = (Join-Path $available[0].FullName 'apksigner.bat'); Aapt = (Join-Path $available[0].FullName 'aapt.exe') }
 }

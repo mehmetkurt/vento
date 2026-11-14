@@ -1,0 +1,6 @@
+[submodule "ventoPOS"]
+	path = ventoPOS
+	url = https://github.com/mehmetkurt/ventoPOS.git
+[submodule "ventoPOS_Keygen"]
+	path = ventoPOS_Keygen
+	url = https://github.com/mehmetkurt/ventoPOS_Keygen.git

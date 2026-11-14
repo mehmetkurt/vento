@@ -1,0 +1,45 @@
+# Operating System Files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# IDEs & Editors
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+*.swp
+*.swo
+*~
+
+# Workspace Logs & Temporary Artifacts
+*.log
+*.tmp
+*.temp
+*.bak
+/tmp/
+/temp/
+.history/
+
+# Centralized Release & Build Outputs
+/dist/
+/build/
+/debug_symbols/
+*.apk
+*.aab
+app.*.symbols
+app.*.map.json
+
+# Signing Keys & Local Secrets (Defense-in-Depth)
+*.jks
+*.keystore
+key.properties
+local.properties
+secrets/
+*_signing_key.json

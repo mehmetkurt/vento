@@ -29,7 +29,7 @@ Both subprojects are registered via `.gitmodules` in the root repository while s
   - Avoid `dynamic` except at untyped JSON / `MethodChannel` boundaries.
 - **SOLID & Clean Architecture Dependency Rule (`presentation -> domain <- data`)**:
   - The `presentation` layer MUST NEVER directly access Drift DAO classes or SQLite table definitions; it communicates strictly via `domain/repositories` contracts and Riverpod providers.
-  - `lib/presentation/**` MUST NOT import `data/database/daos/**`, `database_providers.dart`, `appDatabaseProvider`, `locationsDaoProvider`, or concrete `data/repositories/drift_*` implementations; use `data/providers/presentation_safe_providers.dart` + `domain/repositories` contracts and enforce via `dart run tool/check_presentation_layer_imports.dart`.
+  - `lib/presentation/**` MUST NOT import `data/database/daos/**`, `database_providers.dart`, `appDatabaseProvider`, `locationsDaoProvider`, or concrete `data/repositories/drift_*` implementations; use `data/providers/presentation_safe_providers.dart` + `domain/repositories` contracts and enforce via `dart run tool/check_presentation_layer_imports.dart` plus `dart run tool/check_design_system_tokens.dart` (no `VisualDensity.compact`; use `AppTypography`).
 - **State Management**: `flutter_riverpod` (`v2.x`).
   - **Zero business logic inside UI Widgets or Screens** (`StatelessWidget`, `StatefulWidget`, `ConsumerWidget`, `ConsumerStatefulWidget`).
   - Widgets and screens render state and dispatch user intents to Riverpod `StateNotifier` / `Notifier` providers.

@@ -1,4 +1,4 @@
-# Vento Ecosystem — Shared Architecture, Software Engineering Principles & AI Agent Rules
+﻿# Vento Ecosystem — Shared Architecture, Software Engineering Principles & AI Agent Rules
 
 ## 1. Ecosystem Overview
 `D:\projects\vento` (`https://github.com/mehmetkurt/vento.git`) is the umbrella Git repository containing shared workspace rules, documentation, and unified release tooling alongside two independent Git Submodules that share a common offline cryptographic licensing protocol, brand identity, and engineering baseline:
@@ -75,7 +75,7 @@ Both subprojects are registered via `.gitmodules` in the root repository while s
 - `lib/data/providers/` -> Presentation-safe Riverpod DI facade (`presentation_safe_providers.dart`)
 - `lib/data/repositories/` -> Concrete Drift implementations of domain repository interfaces
 - `lib/data/services/` -> Hardware, platform channels, backup, sync, and media services
-- `lib/domain/models/` -> Immutable business models (`tracking/`, settings, and backup models)
+- `lib/domain/models/` -> Immutable business models (`tracking/`, `payment_settlement/`, settings, and backup models)
 - `lib/domain/repositories/` -> Clean Architecture abstract repository contracts and query options
 - `lib/presentation/design_system/` -> Shared atomic/molecular design system components (`badges/`, `buttons/`, `cards/`, `feedback/`, `inputs/`, `layout/`, `navigation/`, `overlays/`)
 - `lib/presentation/navigation/` -> Centralized navigation registries (`SettingsNavigationRegistry`)

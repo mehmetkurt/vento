@@ -1,4 +1,4 @@
-﻿# Vento Ecosystem — Shared Architecture, Software Engineering Principles & AI Agent Rules
+ Vento Ecosystem — Shared Architecture, Software Engineering Principles & AI Agent Rules
 
 ## 1. Ecosystem Overview
 `D:\projects\vento` (`https://github.com/mehmetkurt/vento.git`) is the umbrella Git repository containing shared workspace rules, documentation, and unified release tooling alongside two independent Git Submodules that share a common offline cryptographic licensing protocol, brand identity, and engineering baseline:

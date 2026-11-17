@@ -29,6 +29,7 @@ Both subprojects are registered via `.gitmodules` in the root repository while s
   - Avoid `dynamic` except at untyped JSON / `MethodChannel` boundaries.
 - **SOLID & Clean Architecture Dependency Rule (`presentation -> domain <- data`)**:
   - The `presentation` layer MUST NEVER directly access Drift DAO classes or SQLite table definitions; it communicates strictly via `domain/repositories` contracts and Riverpod providers.
+  - `lib/presentation/**` MUST NOT import `data/database/daos/**`, `database_providers.dart`, `appDatabaseProvider`, or `locationsDaoProvider`; use `data/providers/presentation_safe_providers.dart` and enforce via `dart run tool/check_presentation_layer_imports.dart`.
 - **State Management**: `flutter_riverpod` (`v2.x`).
   - **Zero business logic inside UI Widgets or Screens** (`StatelessWidget`, `StatefulWidget`, `ConsumerWidget`, `ConsumerStatefulWidget`).
   - Widgets and screens render state and dispatch user intents to Riverpod `StateNotifier` / `Notifier` providers.
@@ -70,7 +71,8 @@ Both subprojects are registered via `.gitmodules` in the root repository while s
 - `lib/core/printer/` -> CPCL command generators and coordinate bounds guards
 - `lib/core/theme/` -> Centralized Material 3 theme and design tokens (`AppColors`, `AppTypography`, `AppSpacing`, `AppRadius`, `AppTheme`, `VentoSemanticTheme`)
 - `lib/core/utils/` -> Pure utility classes, Turkish character/address parsers, permission and link helpers
-- `lib/data/database/` -> Drift SQLite database (`tables/`, `daos/`, `mappers/`, `migration/`)
+- `lib/data/database/` -> Drift SQLite database (`tables/`, `daos/`, `mappers/`, `migration/`) plus internal `database_providers.dart`
+- `lib/data/providers/` -> Presentation-safe Riverpod DI facade (`presentation_safe_providers.dart`)
 - `lib/data/repositories/` -> Concrete Drift implementations of domain repository interfaces
 - `lib/data/services/` -> Hardware, platform channels, backup, sync, and media services
 - `lib/domain/models/` -> Immutable business models (`tracking/`, settings, and backup models)

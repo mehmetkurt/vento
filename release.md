@@ -69,3 +69,12 @@ Keep `android/key.properties`, keystores, signing seeds, build outputs, and debu
 Keygen seeds are provisioned through the app's signing-key setup screen and stored in platform secure storage. Legacy preference seeds migrate after validation and a verified secure-storage write. Builds never accept `VP_KEYGEN_PRIVATE_SEED` through `--dart-define`. Existing administrator installs that relied exclusively on the old embedded seed need the existing administrator seed provisioned once after updating. Customer-app verification keys and tokens remain unchanged.
 
 Install the new APK over the existing application without uninstalling it. Database migration, license continuity, and receipt-sequence tests run before release. Actual physical-device installation, OEM behavior, and Bluetooth printing still require field verification.
+
+## Upgrade safety backups (operators & support)
+
+In-place upgrades produce **two different** automatic safety artifacts. Support must pick the right one:
+
+1. **Pre-migration SQLite** (`…/pre_migration_backups/before_v*_to_v_*.sqlite`) — written by `prepareNativeDatabase` with `VACUUM INTO` **before** Drift schema migration. Use this when recovering from a failed migration or when the old schema must be restored bit-for-bit.
+2. **Post-shell JSON** (`…/ventopos_pre_upgrade_backups/ventopos_pre_upgrade_b*_to_b_*.json`) — written by `AppUpgradeSafetyManager` after `AppShellScreen` starts, from the database **after** migration. Use this for portable logical restore through the app backup path; it is **not** a pre-schema SQLite clone.
+
+Uninstalling the app deletes both folders with application data. Day-to-day operator backups remain under Settings → Yedekleme. See `ventoPOS/README.md` for the operator table.

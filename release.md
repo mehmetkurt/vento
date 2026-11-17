@@ -40,7 +40,7 @@ Automatic selection compares the working-tree version with both Git HEAD and the
 ## Safety sequence
 
 1. Validate all selected repositories before building: package IDs, minimum/target SDK, Java target, production signing properties and keystore, unchanged licensing public key/protocol, and secret/artifact tracking.
-2. Require Android `aapt` and `apksigner`. Verify each existing canonical APK against its repository's `android/release_certificate.sha256`. Certificate pins were established from the existing local production distribution APKs; physical field-device certificates were not independently queried.
+2. Require Android `aapt` and `apksigner`. Verify each existing canonical APK against its repository's `android/release_certificate.sha256`. Pins must match the **field production certificate** used for offline sideload updates (not a rotated unused key). Confirm installed devices with `apksigner verify --print-certs` on a pulled APK when in doubt; see Project store `docs/keystore-rotate.md`.
 3. Require the new APK build number to exceed the previously published APK. Synchronize `pubspec.yaml` with application version constants.
 4. Resolve dependencies, regenerate VentoPOS Drift code, run static analysis, and run the complete test suite. A failure stops release generation.
 5. Build production-signed obfuscated APKs. Keep version-specific debug symbols outside distribution packages. Delete stale build candidates before building so failed commands cannot reuse old APKs.

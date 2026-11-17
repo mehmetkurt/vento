@@ -4,7 +4,7 @@
 `D:\projects\vento` (`https://github.com/mehmetkurt/vento.git`) is the umbrella Git repository containing shared workspace rules, documentation, and unified release tooling alongside two independent Git Submodules that share a common offline cryptographic licensing protocol, brand identity, and engineering baseline:
 
 1. **`ventoPOS/`** (`https://github.com/mehmetkurt/ventoPOS.git`):
-   Customer-facing Android mobile POS, field pickup/delivery tracking, customer/service management, cash ledger, and HPRT HM-A300E CPCL thermal label printing application.
+   Customer-facing Android mobile POS, field pickup/delivery tracking, customer/service management, cash ledger, and HPRT HM-A300E **ESC/POS raster** thermal label printing application (legacy `CPCL` API/class names remain for compatibility).
 2. **`ventoPOS_Keygen/`** (`https://github.com/mehmetkurt/ventoPOS_Keygen.git`):
    Private administrator-only Android mobile application for offline Ed25519 license generation and WhatsApp delivery.
 
@@ -68,7 +68,7 @@ Both subprojects are registered via `.gitmodules` in the root repository while s
 ## 4. Standard Clean Architecture Directory Organization (`ventoPOS/lib/`)
 - `lib/core/constants/` -> App constants, printer metrics, quick notes
 - `lib/core/license/` -> Offline Ed25519 license verification
-- `lib/core/printer/` -> CPCL command generators and coordinate bounds guards
+- `lib/core/printer/` -> ESC/POS receipt builders, legacy CPCL text helpers, and coordinate bounds guards (active WYSIWYG path is ESC/POS raster; `Cpcl*` names are historical)
 - `lib/core/theme/` -> Centralized Material 3 theme and design tokens (`AppColors`, `AppTypography`, `AppSpacing`, `AppRadius`, `AppTheme`, `VentoSemanticTheme`)
 - `lib/core/utils/` -> Pure utility classes, Turkish character/address parsers, permission and link helpers
 - `lib/data/database/` -> Drift SQLite database (`tables/`, `daos/`, `mappers/`, `migration/`) plus internal `database_providers.dart`

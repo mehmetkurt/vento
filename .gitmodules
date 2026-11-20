@@ -4,3 +4,11 @@
 [submodule "ventoPOS_Keygen"]
 	path = ventoPOS_Keygen
 	url = https://github.com/mehmetkurt/ventoPOS_Keygen.git
+[submodule "vento_query_api"]
+	path = vento_query_api
+	url = https://github.com/mehmetkurt/vento_query_api.git
+	branch = main
+[submodule "vento_query_spa"]
+	path = vento_query_spa
+	url = https://github.com/mehmetkurt/vento_query_spa.git
+	branch = main

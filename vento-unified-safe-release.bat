@@ -423,7 +423,7 @@ function Invoke-ReleasePreflight([string]$Name, [string]$Repo, [string]$Package)
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $Repo 'lib') -Recurse -Filter '*.dart') {
         $text = [IO.File]::ReadAllText($file.FullName)
         $relative = $file.FullName.Substring($Repo.Length + 1).Replace('\','/')
-        if ($text -match 'VP_KEYGEN_PRIVATE_SEED|compileTimePrivateSeed' -or ($relative -match '^lib/(data|domain)/' -and $text -match '\.runtimeType\.toString\(\)')) { throw 'Obfuscation/gizli anahtar guvenlik denetimi basarisiz.' }
+        if ($text -match 'VP_KEYGEN_PRIVATE_SEED|compileTimePrivateSeed' -or $text -match '\.runtimeType\.toString\(\)') { throw 'Obfuscation/gizli anahtar guvenlik denetimi basarisiz.' }
     }
     $canonical = Join-Path $Repo "dist\$Name-release.apk"
     $tools = Get-AndroidBuildTools

@@ -8,11 +8,13 @@
 2. **`ventoPOS_Keygen/`** (`https://github.com/mehmetkurt/ventoPOS_Keygen.git`, tracks `master`):
    Private administrator-only Android mobile application for offline Ed25519 license generation and WhatsApp delivery. Private signing seeds are SecureStorage-only (never `--dart-define=VP_KEYGEN_PRIVATE_SEED`).
 3. **`vento_query_api/`** (`https://github.com/mehmetkurt/vento_query_api.git`, tracks `main`):
-   Read-only Node/Express Status API over PostgreSQL (`ventopos_db`) for public receipt+phone verification (`https://query.altigenhaliyikama.com`).
+   Read-only Node/Fastify Status API over PostgreSQL (`ventopos_db`) for public receipt+phone verification (`https://query.altigenhaliyikama.com`).
 4. **`vento_query_spa/`** (`https://github.com/mehmetkurt/vento_query_spa.git`, tracks `main`):
    Customer-facing React SPA for order status lookup (`https://sorgu.altigenhaliyikama.com`).
 
 All four subprojects are registered via `.gitmodules` (with `branch` tracking pins) in the root repository while strictly preserving their own independent Git commit histories, branches, `.gitignore` rules, and remote origins. Do not invent new remotes for these modules.
+
+**Status query DTO sync (TD-W3-05):** `vento_query_api` and `vento_query_spa` each ship an identical copy of `src/contract/status-verify-dto.ts` (Docker builds use per-repo `context: .` — no parent npm workspace package). Enforce with `node tool/check_query_status_dto_sync.mjs` from the umbrella root.
 
 ---
 

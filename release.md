@@ -55,10 +55,16 @@ Workspace `dist/` contains a timestamped release folder, ZIP, and ZIP SHA-256 fi
 
 Each package contains only the selected versioned APK(s), APK SHA-256 files, `release-manifest.json`, and `INSTALLATION.txt`. The manifest records versions/builds, certificate and file hashes, source commit IDs, and whether the source tree contained uncommitted changes.
 
+### Customer / administrator APK isolation
+
+- **Customer path:** `ventoPOS/dist/` may contain only VentoPOS APKs (`VentoPOS-release.apk` and versioned `VentoPOS-v*-release.apk`). It must **never** receive a Keygen APK mirror or copy.
+- **Administrator path:** Keygen APKs stay under `ventoPOS_Keygen/dist/` (`VentoPOS_Keygen-release.apk` and versioned aliases) and under the workspace root administrator package folders (`dist/VentoPOS_Keygen-admin-update-*` / `dist/Vento-admin-release-*`).
+- The unified release script must not publish `VentoPOS_Keygen-release.apk` into `ventoPOS/dist/`.
+
 Repository aliases remain available at:
 
-- `ventoPOS/dist/VentoPOS-release.apk`
-- `ventoPOS_Keygen/dist/VentoPOS_Keygen-release.apk`
+- `ventoPOS/dist/VentoPOS-release.apk` (customer only)
+- `ventoPOS_Keygen/dist/VentoPOS_Keygen-release.apk` (administrator only)
 
 Older versioned APKs and release packages remain available. Build failures preserve the prior APK aliases. Packaging or publication I/O failures stop the command; completed versioned packages and staging files remain for diagnosis. Multi-file alias replacement is not a distributed filesystem transaction.
 

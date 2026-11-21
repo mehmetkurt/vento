@@ -856,14 +856,8 @@ function Invoke-VentoKeygenPipeline {
         $CanonicalApk = Join-Path $DistDir "VentoPOS_Keygen-release.apk"
         $VersionedApk = Join-Path $DistDir "VentoPOS_Keygen-v$FinalVersionName-build$FinalVersionCode-release.apk"
 
-
-        # Kardes ventoPOS\dist klasoru varsa merkezi dagitim icin oraya da kopyala
-        $MirroredSiblingApk = $null
-        if ($PosRoot) {
-            $SiblingVentoDist = Join-Path $PosRoot "dist"
-            New-Item -ItemType Directory -Force -Path $SiblingVentoDist | Out-Null
-            $MirroredSiblingApk = Join-Path $SiblingVentoDist "VentoPOS_Keygen-release.apk"
-        }
+        # Customer/admin isolation: never mirror Keygen APK into ventoPOS\dist.
+        # Keygen artifacts stay under ventoPOS_Keygen\dist and the root admin package dist\.
 
         $ApkSizeMb   = [math]::Round((Get-Item $BuiltApk).Length / 1MB, 2)
         $CertSummary = Verify-BuiltReleaseApk -ApkPath $BuiltApk -ExpectedPackageId "com.ventopos.ventopos_keygen" -ExpectedVersionCode $FinalVersionCode -ExpectedVersionName $FinalVersionName
@@ -879,7 +873,7 @@ function Invoke-VentoKeygenPipeline {
             CandidateApk = $BuiltApk
             CanonicalApk = $CanonicalApk
             VersionedApk = $VersionedApk
-            MirroredApk  = $MirroredSiblingApk
+            MirroredApk  = $null
             SizeMb       = $ApkSizeMb
             Certificate  = $CertSummary
             GitSummary   = "Commit $GitHash | $GitPushMsg"

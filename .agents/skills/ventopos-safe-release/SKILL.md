@@ -7,6 +7,8 @@ description: Audits in-place Android APK upgrade safety, verifies Drift SQLite s
 
 Executes an end-to-end pre-release safety audit, version synchronization, production-signed obfuscated APK build, and `/git-commit-and-push` workflow for **VentoPOS** (`package:ventopos`, `com.ventopos.ventopos`).
 
+**Working directories**: The umbrella workspace root is `D:\projects\vento`. Flutter analyze/test/build commands and relative paths in the gate table below run from **`ventoPOS/`** unless noted. The unified release entry point `vento-unified-safe-release.bat` lives at the umbrella root.
+
 ## Non-Negotiable Core Principle: Never Break Installed Field Apps
 
 When the generated APK is installed directly on top of an active **VentoPOS** installation in the field (**in-place update**):
@@ -36,27 +38,28 @@ When the generated APK is installed directly on top of an active **VentoPOS** in
 
 ### Step 1: In-Place Upgrade and Backward Compatibility Audit
 
-If `.agents/skills/ventopos-safe-release/scripts/verify_release_gates.py` is present in the workspace, run it with `--help` first if inspecting usage and execute it from the repository root (`python .agents/skills/ventopos-safe-release/scripts/verify_release_gates.py`). Regardless of whether the helper script is present, verify all 5 critical invariants below across the codebase:
+There is **no** shipped `verify_release_gates.py` helper under this skill. Manually verify all 5 critical invariants below inside **`ventoPOS/`** (paths are relative to that submodule):
 
-| Gate | Target Files | Mandatory Verification |
+| Gate | Target Files (under `ventoPOS/`) | Mandatory Verification |
 | :--- | :--- | :--- |
-| **1. Android Package & Signing Continuity** | `android/app/build.gradle.kts`, `android/key.properties` | Confirm `applicationId = "com.ventopos.ventopos"` is unchanged, `minSdk = 24` was not raised, and `android/key.properties` plus `ventopos-release.jks` exist on disk. Release builds signed with debug keys are strictly forbidden. |
+| **1. Android Package & Signing Continuity** | `android/app/build.gradle.kts`, `android/key.properties`, `android/release_certificate.sha256` | Confirm `applicationId = "com.ventopos.ventopos"` is unchanged, `minSdk = 24` was not raised, and `android/key.properties` plus `ventopos-release.jks` exist on disk. Release builds signed with debug keys are strictly forbidden. Pin must match field cert `b57229c7075ca3f0255af278188d16aacf8aa628ebeaf9d2990564ff38cd5398`. |
 | **2. SQLite Database & Multi-Schema Migration** | `lib/data/database/app_database.dart`, `lib/data/database/connection/database_connection.dart` | Confirm `kVentoPosEnterpriseDbName = 'ventopos_enterprise_db'` and `getApplicationSupportDirectory` are unchanged. Audit every `from < 2` ... `from < schemaVersion` branch in `AppDatabase.migration.onUpgrade`: all new columns must use `_addColumnIfMissing(...)`, tables/indexes must use `IF NOT EXISTS`, `idx_carpet_orders_receipt_number` must run pre-index deduplication on blank/duplicate historical numbers, and new `NOT NULL` columns must define safe `DEFAULT` values. |
-| **3. License, Photos & `SharedPreferences` Continuity** | `LicenseConstants`, `LicenseCodec`, `DeviceIdentityHandler.kt`, `PreferencesService` | Confirm no change invalidates existing `VP-...` device codes or `VPK1-...` Ed25519 license signatures. Confirm existing `pref*` keys in `PreferencesService` and stored order photo file paths resolve backward-compatibly. |
-| **4. Release `--obfuscate` & `build_runner` Sync** | `lib/**/*.g.dart`, data/JSON/SQLite mappers, background isolates | Run `dart run build_runner build --delete-conflicting-outputs` and confirm `app_database.g.dart` and all `.g.dart` files match current definitions. Scan `lib/data` and `lib/domain` to ensure zero `.runtimeType.toString()` usage in mappers and safe entry points on any background `Isolate`. |
-| **5. Upgrade Safety Integration Test** | `test/data/database/in_place_upgrade_safety_test.dart`, `AppUpgradeSafetyManager` | Run (or add at `test/data/database/in_place_upgrade_safety_test.dart` if absent) an integration test verifying that legacy SQLite databases (`v10`, `v11`, `v12`) populated with customers, orders, cash transactions, routes, and settings upgrade cleanly to the current `schemaVersion` and pass `AppUpgradeSafetyManager.checkAndPerformPreUpgradeSafetySnapshot()` with zero errors and zero data loss. |
+| **3. License, Photos & `SharedPreferences` Continuity** | `lib/core/license/license_constants.dart`, `license_codec.dart`, `DeviceIdentityHandler.kt`, `PreferencesService` | Confirm no change invalidates existing `VP-...` device codes or `VPK1-...` Ed25519 license signatures / public verification key bytes. Confirm existing `pref*` keys in `PreferencesService` and stored order photo file paths resolve backward-compatibly. Keygen private seeds remain SecureStorage-only (never compile-time `VP_KEYGEN_PRIVATE_SEED`). |
+| **4. Release `--obfuscate` & `build_runner` Sync** | `lib/**/*.g.dart`, data/JSON/SQLite mappers, background isolates | From `ventoPOS/`, run `dart run build_runner build --delete-conflicting-outputs` and confirm `app_database.g.dart` and all `.g.dart` files match current definitions. Scan `lib/data` and `lib/domain` to ensure zero `.runtimeType.toString()` usage in mappers and safe entry points on any background `Isolate`. |
+| **5. Upgrade Safety Integration Test** | `test/data/database/in_place_upgrade_safety_test.dart`, `AppUpgradeSafetyManager` | Run the existing integration test at `ventoPOS/test/data/database/in_place_upgrade_safety_test.dart` verifying that legacy SQLite databases populated with customers, orders, cash transactions, routes, and settings upgrade cleanly to the current `schemaVersion` and pass `AppUpgradeSafetyManager` pre-upgrade safety checks with zero errors and zero data loss. |
 
 ### Step 2: Version Increment and Synchronization (`versionName` & `versionCode`)
 
-1. Read `version: X.Y.Z+N` in `pubspec.yaml` (for example `2.1.0+11`).
+1. From `ventoPOS/`, read `version: X.Y.Z+N` in `pubspec.yaml` (for example `2.1.0+11`).
 2. Increment the semantic version and Android `versionCode` (`+N`) for seamless field upgrades (for example `2.1.0+11` -> `2.2.0+12`; if already incremented in the working tree, confirm `+N` is strictly greater than the latest released build).
-3. Update `fallbackPubspecVersionSpec` in `lib/core/constants/app_info_constants.dart` to match `pubspec.yaml` character-for-character so About/Dashboard labels and `AppUpgradeSafetyManager` pre-upgrade snapshot triggers stay synchronized.
+3. Update `fallbackPubspecVersionSpec` in `ventoPOS/lib/core/constants/app_info_constants.dart` to match `pubspec.yaml` character-for-character so About/Dashboard labels and `AppUpgradeSafetyManager` pre-upgrade snapshot triggers stay synchronized.
 
 ### Step 3: Static Analysis and Full Automated Test Suite
 
-Execute both commands sequentially from the repository root and require 100% clean pass before building the release APK:
+Execute both commands sequentially from **`ventoPOS/`** and require 100% clean pass before building the release APK:
 
 ```bash
+cd ventoPOS
 flutter analyze
 flutter test
 ```

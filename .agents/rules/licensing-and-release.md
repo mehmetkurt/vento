@@ -10,9 +10,11 @@ description: Apply when modifying Ed25519 licensing constants, device code forma
    - `ventoPOS/lib/core/license/license_constants.dart` & `license_codec.dart`
    - `ventoPOS_Keygen/lib/core/constants/keygen_constants.dart` & `ed25519_license_signer.dart`
 
-2. **Private Key Isolation**:
-   - The 32-byte Ed25519 private signing seed (`VP_KEYGEN_PRIVATE_SEED`) belongs strictly in `ventoPOS_Keygen`.
-   - Never expose private signing material in `ventoPOS` source files, assets, logs, or error messages.
+2. **Private Key Isolation (SecureStorage-only)**:
+   - The 32-byte Ed25519 private signing seed belongs strictly in `ventoPOS_Keygen`.
+   - Administrators provision the seed through `SigningKeySetupSheet`; it is stored only in platform `FlutterSecureStorage` (legacy SharedPreferences values migrate once after validation).
+   - Never accept `--dart-define=VP_KEYGEN_PRIVATE_SEED=...`, never embed `secrets/keygen_signing_key.json` into release/local APKs, and never expose private signing material in `ventoPOS` source files, assets, logs, or error messages.
+   - Unified release tooling must fail closed if a compile-time private seed define is present.
 
 3. **Android Release Upgrade Continuity**:
    - `ventoPOS` uses `applicationId = "com.ventopos.ventopos"` signed with `android/keystore/ventopos-release.jks`.
@@ -23,4 +25,3 @@ description: Apply when modifying Ed25519 licensing constants, device code forma
    - Never copy or mirror `VentoPOS_Keygen-release.apk` (or any Keygen artifact) into `ventoPOS/dist/`.
    - Keygen APKs belong only under `ventoPOS_Keygen/dist/` and workspace root administrator packages (`dist/VentoPOS_Keygen-admin-update-*`, `dist/Vento-admin-release-*`).
    - `ventoPOS/dist/` is customer-only (`VentoPOS-release.apk` and versioned VentoPOS aliases).
-

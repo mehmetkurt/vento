@@ -43,3 +43,12 @@ key.properties
 local.properties
 secrets/
 *_signing_key.json
+
+# Node / Status Query API & SPA (defense-in-depth; submodule .gitignore remains authoritative)
+node_modules/
+.env
+.env.*
+!.env.example
+!.env.production
+*.tsbuildinfo
+coverage/

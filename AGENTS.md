@@ -1,14 +1,18 @@
  Vento Ecosystem — Shared Architecture, Software Engineering Principles & AI Agent Rules
 
 ## 1. Ecosystem Overview
-`D:\projects\vento` (`https://github.com/mehmetkurt/vento.git`) is the umbrella Git repository containing shared workspace rules, documentation, and unified release tooling alongside two independent Git Submodules that share a common offline cryptographic licensing protocol, brand identity, and engineering baseline:
+`D:\projects\vento` (`https://github.com/mehmetkurt/vento.git`) is the umbrella Git repository containing shared workspace rules, documentation, and unified release tooling alongside four independent Git Submodules. The Android pair shares a common offline cryptographic licensing protocol, brand identity, and engineering baseline; the status-query pair serves customer order lookup on the web:
 
-1. **`ventoPOS/`** (`https://github.com/mehmetkurt/ventoPOS.git`):
+1. **`ventoPOS/`** (`https://github.com/mehmetkurt/ventoPOS.git`, tracks `master`):
    Customer-facing Android mobile POS, field pickup/delivery tracking, customer/service management, cash ledger, and HPRT HM-A300E **ESC/POS raster** thermal label printing application (legacy `CPCL` API/class names remain for compatibility).
-2. **`ventoPOS_Keygen/`** (`https://github.com/mehmetkurt/ventoPOS_Keygen.git`):
-   Private administrator-only Android mobile application for offline Ed25519 license generation and WhatsApp delivery.
+2. **`ventoPOS_Keygen/`** (`https://github.com/mehmetkurt/ventoPOS_Keygen.git`, tracks `master`):
+   Private administrator-only Android mobile application for offline Ed25519 license generation and WhatsApp delivery. Private signing seeds are SecureStorage-only (never `--dart-define=VP_KEYGEN_PRIVATE_SEED`).
+3. **`vento_query_api/`** (`https://github.com/mehmetkurt/vento_query_api.git`, tracks `main`):
+   Read-only Node/Express Status API over PostgreSQL (`ventopos_db`) for public receipt+phone verification (`https://query.altigenhaliyikama.com`).
+4. **`vento_query_spa/`** (`https://github.com/mehmetkurt/vento_query_spa.git`, tracks `main`):
+   Customer-facing React SPA for order status lookup (`https://sorgu.altigenhaliyikama.com`).
 
-Both subprojects are registered via `.gitmodules` in the root repository while strictly preserving their own independent Git commit histories, branches, `.gitignore` rules, and remote origins.
+All four subprojects are registered via `.gitmodules` (with `branch` tracking pins) in the root repository while strictly preserving their own independent Git commit histories, branches, `.gitignore` rules, and remote origins. Do not invent new remotes for these modules.
 
 ---
 
@@ -100,6 +104,7 @@ Any modification to device code derivation or activation token verification MUST
 - **Key Separation**:
   - `ventoPOS` embeds **ONLY** the 32-byte Ed25519 Public Verification Key.
   - **NEVER** copy, embed, or log the Ed25519 Private Signing Seed inside `ventoPOS`.
+  - `ventoPOS_Keygen` loads the private signing seed exclusively from platform SecureStorage after `SigningKeySetupSheet` provisioning; release builds fail closed on compile-time `VP_KEYGEN_PRIVATE_SEED` defines.
 
 ---
 

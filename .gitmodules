@@ -1,9 +1,11 @@
 [submodule "ventoPOS"]
 	path = ventoPOS
 	url = https://github.com/mehmetkurt/ventoPOS.git
+	branch = master
 [submodule "ventoPOS_Keygen"]
 	path = ventoPOS_Keygen
 	url = https://github.com/mehmetkurt/ventoPOS_Keygen.git
+	branch = master
 [submodule "vento_query_api"]
 	path = vento_query_api
 	url = https://github.com/mehmetkurt/vento_query_api.git

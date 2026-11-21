@@ -19,3 +19,8 @@ description: Apply when modifying Ed25519 licensing constants, device code forma
    - `ventoPOS_Keygen` uses `applicationId = "com.ventopos.ventopos_keygen"` signed with `android/keystore/keygen-release.jks`.
    - Never fall back to debug signing for release APKs so field devices can install updates in-place without losing local customer/order data.
 
+4. **Customer / Administrator APK Dist Isolation**:
+   - Never copy or mirror `VentoPOS_Keygen-release.apk` (or any Keygen artifact) into `ventoPOS/dist/`.
+   - Keygen APKs belong only under `ventoPOS_Keygen/dist/` and workspace root administrator packages (`dist/VentoPOS_Keygen-admin-update-*`, `dist/Vento-admin-release-*`).
+   - `ventoPOS/dist/` is customer-only (`VentoPOS-release.apk` and versioned VentoPOS aliases).
+

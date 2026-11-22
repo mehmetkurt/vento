@@ -51,6 +51,37 @@ function Write-Utf8NoBom([string]$FilePath, [string]$Content) {
     [System.IO.File]::WriteAllText($FilePath, $Content,$Utf8NoBom)
 }
 
+function Initialize-ReleaseLogs {
+    $script:LogsDir = Join-Path $script:BatDir 'logs'
+    [System.IO.Directory]::CreateDirectory($script:LogsDir) | Out-Null
+    # Keep only the latest run: wipe previous step logs before writing fresh ones.
+    Get-ChildItem -LiteralPath $script:LogsDir -File -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like '*.log' } |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+    Write-Host ("  Adim loglari          : " + $script:LogsDir) -ForegroundColor Gray
+}
+
+function Write-StepLog([string]$LogName, [string]$Content) {
+    if ([string]::IsNullOrWhiteSpace($script:LogsDir)) { return }
+    $safeName = ($LogName -replace '[\\/:*?"<>|]', '_').Trim()
+    if ([string]::IsNullOrWhiteSpace($safeName)) { $safeName = 'step' }
+    Write-Utf8NoBom -FilePath (Join-Path $script:LogsDir ($safeName + '.log')) -Content $(if ($null -eq $Content) { '' } else { $Content })
+}
+
+function Invoke-LoggedCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$LogName,
+        [Parameter(Mandatory = $true)][scriptblock]$Command
+    )
+    $output = @(& $Command 2>&1)
+    $exitCode = $LASTEXITCODE
+    $lines = @($output | ForEach-Object { "$_" })
+    Write-StepLog -LogName $LogName -Content ($lines -join [Environment]::NewLine)
+    foreach ($line in $lines) { Write-Host $line }
+    if ($null -eq $exitCode) { return 0 }
+    return [int]$exitCode
+}
+
 function Read-TimedKey([string]$PromptPrefix, [int]$Seconds = 6) {
     $SelectedKey =$null
     if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
@@ -89,10 +120,11 @@ $SkipCodegen  = $CliTokens -contains "--skip-codegen"
 $NoOpenDist   = $CliTokens -contains "--no-open"
 if ($SkipCodegen) { throw 'Guvenli release icin --skip-codegen desteklenmiyor.' }
 if ($CliTokens -contains '--help') {
-    Write-Host 'vento-unified-safe-release.bat --pos|--keygen|--both [--pos-version X.Y.Z+N] [--keygen-version X.Y.Z+N]'
+    Write-Host 'build.bat (or build\vento-unified-safe-release.bat) --pos|--keygen|--both [--pos-version X.Y.Z+N] [--keygen-version X.Y.Z+N]'
     Write-Host '--verify-only: mevcut APKlari denetler; surum/derleme/Git islemi yapmaz.'
     Write-Host '--self-test: dahili sertifika, paket ve yayin testlerini calistirir.'
     Write-Host '--no-open, --commit, --push, --no-push (yerel commit), --no-git (varsayilan)'
+    Write-Host 'Per-step logs: build\logs\ (latest run only; previous *.log files are deleted at start).'
     exit 0
 }
 $AllowedSwitches = @('--pos','--ventopos','--keygen','--both','--all','--pos-version','--keygen-version','--version','--verify-only','--self-test','--no-open','--no-push','--no-git','--commit','--push')
@@ -155,11 +187,16 @@ function Test-IsKeygenRepo([string]$DirPath) {
 }
 
 $BatDir = $env:VENTO_UNIFIED_BAT_DIR.TrimEnd('\', '/')
-$SearchRoots = @($BatDir)
-$ParentOfBat = Split-Path -Parent $BatDir
-if (-not [string]::IsNullOrWhiteSpace($ParentOfBat)) { $SearchRoots += $ParentOfBat }
-$GrandParent = Split-Path -Parent $ParentOfBat
-if (-not [string]::IsNullOrWhiteSpace($GrandParent)) { $SearchRoots += $GrandParent }
+# Script lives under build\; umbrella repo root is its parent.
+if ((Split-Path -Leaf $BatDir) -ieq 'build') {
+    $UmbrellaRoot = Split-Path -Parent $BatDir
+} else {
+    $UmbrellaRoot = $BatDir
+}
+$SearchRoots = @($UmbrellaRoot)
+if ($BatDir -ne $UmbrellaRoot) { $SearchRoots += $BatDir }
+$ParentOfUmbrella = Split-Path -Parent $UmbrellaRoot
+if (-not [string]::IsNullOrWhiteSpace($ParentOfUmbrella)) { $SearchRoots += $ParentOfUmbrella }
 
 $PosRoot = $null
 $KeygenRoot = $null
@@ -203,16 +240,21 @@ if (-not $DartBin) {
     if ($DartCmd) { $DartBin = $DartCmd.Source } else { $DartBin = "dart" }
 }
 
+$script:BatDir = $BatDir
+$script:UmbrellaRoot = $UmbrellaRoot
+Initialize-ReleaseLogs
+
 # ---------------------------------------------------------------------------
 # Baslangic Ozeti ve Hedef Secim Menusu
 # ---------------------------------------------------------------------------
 Write-Section "VENTOPOS & KEYGEN UNIFIED SAFE RELEASE PIPELINE"
+Write-Host ("  Umbrella Kok          : " + $UmbrellaRoot) -ForegroundColor Gray
 Write-Host ("  ventoPOS Dizini        : " + $(if ($PosRoot) { $PosRoot } else { "[BULUNAMADI]" })) -ForegroundColor $(if ($PosRoot) { "Gray" } else { "Red" })
 Write-Host ("  ventoPOS_Keygen Dizini : " + $(if ($KeygenRoot) { $KeygenRoot } else { "[BULUNAMADI]" })) -ForegroundColor $(if ($KeygenRoot) { "Gray" } else { "Red" })
 Write-Host "  Flutter Yolu           : $FlutterBin" -ForegroundColor Gray
 
 if (-not $PosRoot -and -not $KeygenRoot) {
-    Write-FailAndExit "Ne ventoPOS ne de ventoPOS_Keygen klasoru bulunabildi! .bat dosyasini projelerin ust klasorune koyun."
+    Write-FailAndExit "Ne ventoPOS ne de ventoPOS_Keygen klasoru bulunabildi! build\vento-unified-safe-release.bat umbrella kokunun altinda olmali."
 }
 
 if (-not $TargetMode -and ($VerifyOnly -or $SelfTest)) { $TargetMode = "BOTH" }
@@ -400,43 +442,62 @@ function Assert-UpgradeBuild([string]$Spec, [int]$Previous) {
 }
 function Invoke-ReleasePreflight([string]$Name, [string]$Repo, [string]$Package) {
     Write-SubHeader "${Name}: derleme oncesi guvenlik denetimi"
-    $gradle = [IO.File]::ReadAllText((Join-Path $Repo 'android\app\build.gradle.kts'))
-    if ($gradle -notmatch ('applicationId\s*=\s*"' + [regex]::Escape($Package) + '"') -or $gradle -notmatch 'minSdk\s*=\s*24\b' -or $gradle -notmatch 'targetSdk\s*=\s*36\b' -or $gradle -notmatch 'JavaVersion.VERSION_17') { throw 'Android paket/SDK/Java uyumlulugu bozulmus.' }
-    $properties = @{}
-    foreach ($line in [IO.File]::ReadAllLines((Join-Path $Repo 'android\key.properties'))) {
-        if ($line -match '^\s*([^#!\s=]+)\s*=\s*(.*?)\s*$') { $properties[$Matches[1]] = $Matches[2] }
-    }
-    foreach ($key in @('storeFile','storePassword','keyAlias','keyPassword')) {
-        if (-not $properties.ContainsKey($key) -or [string]::IsNullOrWhiteSpace($properties[$key])) { throw 'Uretim imza yapilandirmasi eksik.' }
-    }
-    $keystore = $properties['storeFile']
-    if (-not [IO.Path]::IsPathRooted($keystore)) { $keystore = Join-Path (Join-Path $Repo 'android\app') $keystore }
-    if (-not (Test-Path -LiteralPath $keystore -PathType Leaf)) { throw 'Gradle keystore dosyasi bulunamadi.' }
-    $tracked = @(& git -C $Repo ls-files)
-    if ($LASTEXITCODE -ne 0) { throw 'Git depo denetimi basarisiz.' }
-    if (@($tracked | Where-Object { $_ -match '(^|/)key\.properties$|\.jks$|\.keystore$|^secrets/|^dist/|^debug_symbols/|^build/|\.apk$|\.aab$' }).Count -gt 0) { throw 'Git tarafindan izlenen gizli dosya veya derleme ciktisi var.' }
-    $constantFile = if ($Name -eq 'VentoPOS') { 'lib\core\license\license_constants.dart' } else { 'lib\core\constants\keygen_constants.dart' }
-    $constants = [IO.File]::ReadAllText((Join-Path $Repo $constantFile))
-    $publicKey = [regex]::Match($constants, '(?:publicKeyBase64Url|expectedPublicKeyBase64Url)\s*=\s*''([^'']+)''')
-    if (-not $publicKey.Success -or $publicKey.Groups[1].Value -cne 'jf10UMxb1rMu00bH-VIL5oLHo3r0u5p5VVtzuW9j-d0') { throw 'Sahadaki lisanslarin acik anahtari degismis.' }
-    if ($constants -notmatch "signatureDomainTag\s*=\s*'VP-LICENSE-V1:'" -or $constants -notmatch 'protocolVersion\s*=\s*1\b') { throw 'Lisans protokolu degismis.' }
-    foreach ($file in Get-ChildItem -LiteralPath (Join-Path $Repo 'lib') -Recurse -Filter '*.dart') {
-        $text = [IO.File]::ReadAllText($file.FullName)
-        $relative = $file.FullName.Substring($Repo.Length + 1).Replace('\','/')
-        if ($text -match 'VP_KEYGEN_PRIVATE_SEED|compileTimePrivateSeed' -or $text -match '\.runtimeType\.toString\(\)') { throw 'Obfuscation/gizli anahtar guvenlik denetimi basarisiz.' }
-    }
-    $canonical = Join-Path $Repo "dist\$Name-release.apk"
-    $tools = Get-AndroidBuildTools
-    if (Test-Path -LiteralPath $canonical) {
-        $null = Verify-BuiltReleaseApk -ApkPath $canonical -ExpectedPackageId $Package -ExpectedVersionCode 0
-        $metadata = (& $tools.Aapt dump badging $canonical | Select-String '^package:' | Out-String)
-        if ($LASTEXITCODE -ne 0 -or $metadata -notmatch "versionCode='(\d+)'") { throw 'Onceki APK build numarasi okunamadi.' }
-        $PreviousBuilds[$Name] = [int]$Matches[1]
-    } else {
-        if ($VerifyOnly) { throw 'Dogrulanacak onceki APK bulunamadi.' }
-        $pubspec = [IO.File]::ReadAllText((Join-Path $Repo 'pubspec.yaml'))
-        if ($pubspec -notmatch '(?m)^version:\s*\d+\.\d+\.\d+\+(\d+)') { throw 'Mevcut build numarasi okunamadi.' }
-        $PreviousBuilds[$Name] = [int]$Matches[1]
+    $logName = if ($Name -eq 'VentoPOS') { 'pos-preflight' } else { 'keygen-preflight' }
+    $logLines = New-Object System.Collections.Generic.List[string]
+    try {
+        $gradle = [IO.File]::ReadAllText((Join-Path $Repo 'android\app\build.gradle.kts'))
+        if ($gradle -notmatch ('applicationId\s*=\s*"' + [regex]::Escape($Package) + '"') -or $gradle -notmatch 'minSdk\s*=\s*24\b' -or $gradle -notmatch 'targetSdk\s*=\s*36\b' -or $gradle -notmatch 'JavaVersion.VERSION_17') { throw 'Android paket/SDK/Java uyumlulugu bozulmus.' }
+        $properties = @{}
+        foreach ($line in [IO.File]::ReadAllLines((Join-Path $Repo 'android\key.properties'))) {
+            if ($line -match '^\s*([^#!\s=]+)\s*=\s*(.*?)\s*$') { $properties[$Matches[1]] = $Matches[2] }
+        }
+        foreach ($key in @('storeFile','storePassword','keyAlias','keyPassword')) {
+            if (-not $properties.ContainsKey($key) -or [string]::IsNullOrWhiteSpace($properties[$key])) { throw 'Uretim imza yapilandirmasi eksik.' }
+        }
+        $keystore = $properties['storeFile']
+        if (-not [IO.Path]::IsPathRooted($keystore)) { $keystore = Join-Path (Join-Path $Repo 'android\app') $keystore }
+        if (-not (Test-Path -LiteralPath $keystore -PathType Leaf)) { throw 'Gradle keystore dosyasi bulunamadi.' }
+        $tracked = @(& git -C $Repo ls-files)
+        if ($LASTEXITCODE -ne 0) { throw 'Git depo denetimi basarisiz.' }
+        if (@($tracked | Where-Object { $_ -match '(^|/)key\.properties$|\.jks$|\.keystore$|^secrets/|^dist/|^debug_symbols/|^build/|\.apk$|\.aab$' }).Count -gt 0) { throw 'Git tarafindan izlenen gizli dosya veya derleme ciktisi var.' }
+        $constantFile = if ($Name -eq 'VentoPOS') { 'lib\core\license\license_constants.dart' } else { 'lib\core\constants\keygen_constants.dart' }
+        $constants = [IO.File]::ReadAllText((Join-Path $Repo $constantFile))
+        $publicKey = [regex]::Match($constants, '(?:publicKeyBase64Url|expectedPublicKeyBase64Url)\s*=\s*''([^'']+)''')
+        if (-not $publicKey.Success -or $publicKey.Groups[1].Value -cne 'jf10UMxb1rMu00bH-VIL5oLHo3r0u5p5VVtzuW9j-d0') { throw 'Sahadaki lisanslarin acik anahtari degismis.' }
+        if ($constants -notmatch "signatureDomainTag\s*=\s*'VP-LICENSE-V1:'" -or $constants -notmatch 'protocolVersion\s*=\s*1\b') { throw 'Lisans protokolu degismis.' }
+        foreach ($file in Get-ChildItem -LiteralPath (Join-Path $Repo 'lib') -Recurse -Filter '*.dart') {
+            $text = [IO.File]::ReadAllText($file.FullName)
+            $relative = $file.FullName.Substring($Repo.Length + 1).Replace('\','/')
+            if ($text -match 'VP_KEYGEN_PRIVATE_SEED|compileTimePrivateSeed' -or $text -match '\.runtimeType\.toString\(\)') { throw 'Obfuscation/gizli anahtar guvenlik denetimi basarisiz.' }
+        }
+        $canonical = Join-Path $Repo "dist\$Name-release.apk"
+        $tools = Get-AndroidBuildTools
+        if (Test-Path -LiteralPath $canonical) {
+            $null = Verify-BuiltReleaseApk -ApkPath $canonical -ExpectedPackageId $Package -ExpectedVersionCode 0
+            $metadata = (& $tools.Aapt dump badging $canonical | Select-String '^package:' | Out-String)
+            if ($LASTEXITCODE -ne 0 -or $metadata -notmatch "versionCode='(\d+)'") { throw 'Onceki APK build numarasi okunamadi.' }
+            $PreviousBuilds[$Name] = [int]$Matches[1]
+            $logLines.Add("canonical_apk=$canonical")
+            $logLines.Add("previous_version_code=$($PreviousBuilds[$Name])")
+        } else {
+            if ($VerifyOnly) { throw 'Dogrulanacak onceki APK bulunamadi.' }
+            $pubspec = [IO.File]::ReadAllText((Join-Path $Repo 'pubspec.yaml'))
+            if ($pubspec -notmatch '(?m)^version:\s*\d+\.\d+\.\d+\+(\d+)') { throw 'Mevcut build numarasi okunamadi.' }
+            $PreviousBuilds[$Name] = [int]$Matches[1]
+            $logLines.Add('canonical_apk=missing')
+            $logLines.Add("previous_version_code=$($PreviousBuilds[$Name])")
+        }
+        $logLines.Add("repo=$Repo")
+        $logLines.Add("package=$Package")
+        $logLines.Add('result=PASS')
+        Write-StepLog -LogName $logName -Content ($logLines -join [Environment]::NewLine)
+    } catch {
+        $logLines.Add("repo=$Repo")
+        $logLines.Add("package=$Package")
+        $logLines.Add('result=FAIL')
+        $logLines.Add("error=$($_.Exception.Message)")
+        Write-StepLog -LogName $logName -Content ($logLines -join [Environment]::NewLine)
+        throw
     }
 }
 function Publish-VerifiedFile([string]$Source, [string]$Destination, [switch]$Immutable) {
@@ -571,8 +632,8 @@ function Invoke-VentoPosPipeline {
     Write-Section "BOLUM A: VENTOPOS (MUSTERI UYGULAMASI) SAFE RELEASE PIPELINE"
     Push-Location $PosRoot
     try {
-        & $FlutterBin pub get | Out-Host
-        if ($LASTEXITCODE -ne 0) { throw "Bagimliliklar yuklenemedi." }
+        $pubGetExit = Invoke-LoggedCommand -LogName 'pos-pub-get' -Command { & $FlutterBin pub get }
+        if ($pubGetExit -ne 0) { throw "Bagimliliklar yuklenemedi." }
         # ADIM 1: Guvenlik Kapilari
         Write-SubHeader "[VentoPOS 1/5] Yerinde Guncelleme (In-Place Upgrade) Denetimi"
         $BuildGradlePath = Join-Path $PosRoot "android\app\build.gradle.kts"
@@ -621,8 +682,8 @@ function Invoke-VentoPosPipeline {
         }
 
         if (-not $SkipCodegen) {
-            & $DartBin run build_runner build --delete-conflicting-outputs | Out-Host
-            if ($LASTEXITCODE -ne 0) { Write-FailAndExit "VentoPOS build_runner basarisiz oldu!" }
+            $codegenExit = Invoke-LoggedCommand -LogName 'pos-codegen' -Command { & $DartBin run build_runner build --delete-conflicting-outputs }
+            if ($codegenExit -ne 0) { Write-FailAndExit "VentoPOS build_runner basarisiz oldu!" }
         }
         Write-Pass "VentoPOS guvenlik kapilari (Keystore, SQLite, Ed25519, Codegen) dogrulandi."
 
@@ -655,10 +716,10 @@ function Invoke-VentoPosPipeline {
 
         # ADIM 3: Analiz ve Testler
         Write-SubHeader "[VentoPOS 3/5] flutter analyze & flutter test"
-        & $FlutterBin analyze --no-pub | Out-Host
-        if ($LASTEXITCODE -ne 0) { Write-FailAndExit "VentoPOS flutter analyze hatasi!" }
-        & $FlutterBin test --no-pub | Out-Host
-        if ($LASTEXITCODE -ne 0) { Write-FailAndExit "VentoPOS flutter test hatasi!" }
+        $analyzeExit = Invoke-LoggedCommand -LogName 'pos-analyze' -Command { & $FlutterBin analyze --no-pub }
+        if ($analyzeExit -ne 0) { Write-FailAndExit "VentoPOS flutter analyze hatasi!" }
+        $testExit = Invoke-LoggedCommand -LogName 'pos-test' -Command { & $FlutterBin test --no-pub }
+        if ($testExit -ne 0) { Write-FailAndExit "VentoPOS flutter test hatasi!" }
         Write-Pass "VentoPOS statik analiz ve calistirilan testleri basariyla tamamlandi."
 
         # ADIM 4: Imzali, Obfuscated & Stripped Release APK Derleme
@@ -670,8 +731,8 @@ function Invoke-VentoPosPipeline {
 
         $staleCandidate = Join-Path (Get-Location).Path 'build\app\outputs\flutter-apk\app-release.apk'
         if (Test-Path -LiteralPath $staleCandidate) { Remove-Item -LiteralPath $staleCandidate -Force }
-        & $FlutterBin build apk --release --no-pub --obfuscate "--split-debug-info=$SymbolsDir" "--extra-gen-snapshot-options=--strip" | Out-Host
-        if ($LASTEXITCODE -ne 0) { Write-FailAndExit "VentoPOS release APK derlemesi basarisiz oldu!" }
+        $apkExit = Invoke-LoggedCommand -LogName 'pos-apk' -Command { & $FlutterBin build apk --release --no-pub --obfuscate "--split-debug-info=$SymbolsDir" "--extra-gen-snapshot-options=--strip" }
+        if ($apkExit -ne 0) { Write-FailAndExit "VentoPOS release APK derlemesi basarisiz oldu!" }
 
         $BuiltApk     = Join-Path $PosRoot "build\app\outputs\flutter-apk\app-release.apk"
         $CanonicalApk = Join-Path $DistDir "VentoPOS-release.apk"
@@ -710,8 +771,8 @@ function Invoke-VentoKeygenPipeline {
     Write-Section "BOLUM B: VENTOPOS_KEYGEN (YONETICI UYGULAMASI) SAFE RELEASE PIPELINE"
     Push-Location $KeygenRoot
     try {
-        & $FlutterBin pub get | Out-Host
-        if ($LASTEXITCODE -ne 0) { throw "Bagimliliklar yuklenemedi." }
+        $pubGetExit = Invoke-LoggedCommand -LogName 'keygen-pub-get' -Command { & $FlutterBin pub get }
+        if ($pubGetExit -ne 0) { throw "Bagimliliklar yuklenemedi." }
         # ADIM 1: 5 Guvenlik Kapisi
         Write-SubHeader "[Keygen 1/5] Guvenlik, Ed25519 Kripto ve Yerinde Guncelleme Denetimi"
         $BuildGradlePath = Join-Path $KeygenRoot "android\app\build.gradle.kts"
@@ -834,10 +895,10 @@ function Invoke-VentoKeygenPipeline {
 
         # ADIM 3: Analiz ve Testler
         Write-SubHeader "[Keygen 3/5] flutter analyze & flutter test"
-        & $FlutterBin analyze --no-pub | Out-Host
-        if ($LASTEXITCODE -ne 0) { Write-FailAndExit "Keygen flutter analyze hatasi!" }
-        & $FlutterBin test --no-pub | Out-Host
-        if ($LASTEXITCODE -ne 0) { Write-FailAndExit "Keygen flutter test hatasi!" }
+        $analyzeExit = Invoke-LoggedCommand -LogName 'keygen-analyze' -Command { & $FlutterBin analyze --no-pub }
+        if ($analyzeExit -ne 0) { Write-FailAndExit "Keygen flutter analyze hatasi!" }
+        $testExit = Invoke-LoggedCommand -LogName 'keygen-test' -Command { & $FlutterBin test --no-pub }
+        if ($testExit -ne 0) { Write-FailAndExit "Keygen flutter test hatasi!" }
         Write-Pass "Keygen statik analiz ve calistirilan testleri basariyla tamamlandi."
 
         # ADIM 4: Imzali, Obfuscated & Stripped Release APK Derleme
@@ -849,8 +910,8 @@ function Invoke-VentoKeygenPipeline {
 
         $staleCandidate = Join-Path (Get-Location).Path 'build\app\outputs\flutter-apk\app-release.apk'
         if (Test-Path -LiteralPath $staleCandidate) { Remove-Item -LiteralPath $staleCandidate -Force }
-        & $FlutterBin build apk --release --no-pub --obfuscate "--split-debug-info=$SymbolsDir" "--extra-gen-snapshot-options=--strip" | Out-Host
-        if ($LASTEXITCODE -ne 0) { Write-FailAndExit "VentoPOS_Keygen release APK derlemesi basarisiz oldu!" }
+        $apkExit = Invoke-LoggedCommand -LogName 'keygen-apk' -Command { & $FlutterBin build apk --release --no-pub --obfuscate "--split-debug-info=$SymbolsDir" "--extra-gen-snapshot-options=--strip" }
+        if ($apkExit -ne 0) { Write-FailAndExit "VentoPOS_Keygen release APK derlemesi basarisiz oldu!" }
 
         $BuiltApk     = Join-Path $KeygenRoot "build\app\outputs\flutter-apk\app-release.apk"
         $CanonicalApk = Join-Path $DistDir "VentoPOS_Keygen-release.apk"
@@ -888,10 +949,19 @@ function Invoke-VentoKeygenPipeline {
 # Secilen Hedefleri Calistir ve Ortak Sonuc Raporu Uret
 # ---------------------------------------------------------------------------
 if (($CliTokens -contains '--version') -and $BuildPos -and $BuildKeygen) { throw '--version tek hedef gerektirir; iki hedef icin ayri surum belirtin.' }
-if ($SelfTest) { Invoke-ReleaseSelfTest; exit 0 }
+if ($SelfTest) {
+    try {
+        Invoke-ReleaseSelfTest
+        Write-StepLog -LogName 'selftest' -Content 'result=PASS'
+        exit 0
+    } catch {
+        Write-StepLog -LogName 'selftest' -Content (("result=FAIL" + [Environment]::NewLine + "error=$($_.Exception.Message)"))
+        throw
+    }
+}
 if (-not $VerifyOnly) {
     $mutexHasher = [Security.Cryptography.SHA256]::Create()
-    try { $mutexSuffix = ([BitConverter]::ToString($mutexHasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($BatDir.ToLowerInvariant())))).Replace('-','') } finally { $mutexHasher.Dispose() }
+    try { $mutexSuffix = ([BitConverter]::ToString($mutexHasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($UmbrellaRoot.ToLowerInvariant())))).Replace('-','') } finally { $mutexHasher.Dispose() }
     $ReleaseMutex = New-Object Threading.Mutex($false, ('Local\VentoUnifiedRelease-' + $mutexSuffix))
     try { $acquired = $ReleaseMutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $acquired = $true }
     if (-not $acquired) { throw 'Bu calisma alaninda baska bir release islemi suruyor.' }
@@ -902,29 +972,54 @@ if ($VerifyOnly) { Write-Pass 'Secilen mevcut APKlar ve guvenlik kapilari dogrul
 $Results = @()
 if ($BuildPos) { $Results += (Invoke-VentoPosPipeline) }
 if ($BuildKeygen) { $Results += (Invoke-VentoKeygenPipeline) }
-$Package = New-UpdatePackage $Results (Join-Path $BatDir 'dist')
-foreach ($result in $Results) {
-    $verified = Join-Path $Package.Directory (Split-Path -Leaf $result.VersionedApk)
-    Publish-VerifiedFile $verified $result.VersionedApk -Immutable
-    Publish-VerifiedFile $verified $result.CanonicalApk
-    if ($result.MirroredApk) { Publish-VerifiedFile $verified $result.MirroredApk }
+$packageLog = New-Object System.Collections.Generic.List[string]
+try {
+    $Package = New-UpdatePackage $Results (Join-Path $UmbrellaRoot 'dist')
+    $packageLog.Add("output_root=$(Join-Path $UmbrellaRoot 'dist')")
+    $packageLog.Add("package_dir=$($Package.Directory)")
+    $packageLog.Add("package_zip=$($Package.Zip)")
+    foreach ($result in $Results) {
+        $verified = Join-Path $Package.Directory (Split-Path -Leaf $result.VersionedApk)
+        Publish-VerifiedFile $verified $result.VersionedApk -Immutable
+        Publish-VerifiedFile $verified $result.CanonicalApk
+        if ($result.MirroredApk) { Publish-VerifiedFile $verified $result.MirroredApk }
+        $packageLog.Add("published=$($result.App) -> $($result.CanonicalApk)")
+    }
+    $packageLog.Add('result=PASS')
+    Write-StepLog -LogName 'package' -Content ($packageLog -join [Environment]::NewLine)
+} catch {
+    $packageLog.Add('result=FAIL')
+    $packageLog.Add("error=$($_.Exception.Message)")
+    Write-StepLog -LogName 'package' -Content ($packageLog -join [Environment]::NewLine)
+    throw
 }
 if (-not $NoGit) {
-    foreach ($result in $Results) {
-        $repo = if ($result.App -eq 'VentoPOS') { $PosRoot } else { $KeygenRoot }
-        & git -C $repo add -A | Out-Host
-        if ($LASTEXITCODE -ne 0) { throw 'Git staging basarisiz.' }
-        $staged = @(& git -C $repo diff --cached --name-only)
-        if (@($staged | Where-Object { $_ -match '(^|/)key\.properties$|\.jks$|\.keystore$|^secrets/|^dist/|^debug_symbols/|^build/|\.apk$|\.aab$' }).Count -gt 0) { throw 'Commit icinde gizli dosya veya derleme ciktisi var.' }
-        if ($staged.Count -gt 0) {
-            & git -C $repo commit -m "chore(release): prepare $($result.App) $($result.VersionSpec)" | Out-Host
-            if ($LASTEXITCODE -ne 0) { throw 'Git commit basarisiz.' }
+    $gitLog = New-Object System.Collections.Generic.List[string]
+    try {
+        foreach ($result in $Results) {
+            $repo = if ($result.App -eq 'VentoPOS') { $PosRoot } else { $KeygenRoot }
+            $addExit = Invoke-LoggedCommand -LogName ("git-" + $(if ($result.App -eq 'VentoPOS') { 'pos' } else { 'keygen' }) + '-add') -Command { & git -C $repo add -A }
+            if ($addExit -ne 0) { throw 'Git staging basarisiz.' }
+            $staged = @(& git -C $repo diff --cached --name-only)
+            if (@($staged | Where-Object { $_ -match '(^|/)key\.properties$|\.jks$|\.keystore$|^secrets/|^dist/|^debug_symbols/|^build/|\.apk$|\.aab$' }).Count -gt 0) { throw 'Commit icinde gizli dosya veya derleme ciktisi var.' }
+            if ($staged.Count -gt 0) {
+                $commitExit = Invoke-LoggedCommand -LogName ("git-" + $(if ($result.App -eq 'VentoPOS') { 'pos' } else { 'keygen' }) + '-commit') -Command { & git -C $repo commit -m "chore(release): prepare $($result.App) $($result.VersionSpec)" }
+                if ($commitExit -ne 0) { throw 'Git commit basarisiz.' }
+            }
+            if (-not $NoPush) {
+                $pushExit = Invoke-LoggedCommand -LogName ("git-" + $(if ($result.App -eq 'VentoPOS') { 'pos' } else { 'keygen' }) + '-push') -Command { & git -C $repo push origin HEAD }
+                if ($pushExit -ne 0) { throw 'Git push basarisiz; yerel paket korunuyor.' }
+            }
+            $result.GitSummary = 'Istenen Git islemi tamamlandi'
+            $gitLog.Add("$($result.App): $($result.GitSummary)")
         }
-        if (-not $NoPush) {
-            & git -C $repo push origin HEAD | Out-Host
-            if ($LASTEXITCODE -ne 0) { throw 'Git push basarisiz; yerel paket korunuyor.' }
-        }
-        $result.GitSummary = 'Istenen Git islemi tamamlandi'
+        $gitLog.Add('result=PASS')
+        Write-StepLog -LogName 'git' -Content ($gitLog -join [Environment]::NewLine)
+    } catch {
+        $gitLog.Add('result=FAIL')
+        $gitLog.Add("error=$($_.Exception.Message)")
+        Write-StepLog -LogName 'git' -Content ($gitLog -join [Environment]::NewLine)
+        throw
     }
 }
 Write-Pass "Dogrulanmis guncelleme paketi: $($Package.Zip)"

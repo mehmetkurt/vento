@@ -1,17 +1,19 @@
 # Unified safe Android release
 
-`D:/projects/vento/vento-unified-safe-release.bat` is the only release entry point for both independent repositories. All checks, build orchestration, APK verification, and update packaging live in its embedded PowerShell payload. No standalone release `.ps1` file is required.
+Root `build.bat` is the ergonomic entry point; it forwards all arguments to `build/vento-unified-safe-release.bat`. That script is the only release implementation for both independent repositories. All checks, build orchestration, APK verification, and update packaging live in its embedded PowerShell payload. No standalone release `.ps1` file is required.
+
+Each run writes **latest-only** per-step logs under `build/logs/` (previous `*.log` files are deleted at start). Typical names: `pos-preflight.log`, `pos-pub-get.log`, `pos-codegen.log`, `pos-analyze.log`, `pos-test.log`, `pos-apk.log`, `keygen-preflight.log`, `keygen-pub-get.log`, `keygen-analyze.log`, `keygen-test.log`, `keygen-apk.log`, `package.log`, `git.log`, `selftest.log`.
 
 ## Usage
 
-Double-click the BAT to choose VentoPOS, Keygen, or both and select a version. From a terminal:
+Double-click `build.bat` (or `build\vento-unified-safe-release.bat`) to choose VentoPOS, Keygen, or both and select a version. From a terminal at the umbrella root:
 
 ```powershell
-.\vento-unified-safe-release.bat --both --no-open
-.\vento-unified-safe-release.bat --pos --version 2.8.6+27 --no-open
-.\vento-unified-safe-release.bat --keygen --version 1.1.4+6 --no-open
-.\vento-unified-safe-release.bat --both --verify-only --no-open
-.\vento-unified-safe-release.bat --self-test --no-open
+.\build.bat --both --no-open
+.\build.bat --pos --version 2.8.6+27 --no-open
+.\build.bat --keygen --version 1.1.4+6 --no-open
+.\build.bat --both --verify-only --no-open
+.\build.bat --self-test --no-open
 ```
 
 Use versions higher than the currently published APKs. The examples above are illustrative; inspect the current `pubspec.yaml` and published build first.

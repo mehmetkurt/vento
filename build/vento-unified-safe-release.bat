@@ -44,7 +44,6 @@ function Write-SubHeader([string]$Title) {
 
 function Write-Pass([string]$Message) { Write-Host "  [OK] $Message" -ForegroundColor Green }
 function Write-WarnMsg([string]$Message) { Write-Host "  [UYARI] $Message" -ForegroundColor Yellow }
-function Write-FailAndExit([string]$Message) { Write-Host "`n  [HATA] $Message" -ForegroundColor Red; exit 1 }
 
 function Write-Utf8NoBom([string]$FilePath, [string]$Content) {
     $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
@@ -53,12 +52,14 @@ function Write-Utf8NoBom([string]$FilePath, [string]$Content) {
 
 function Initialize-ReleaseLogs {
     $script:LogsDir = Join-Path $script:BatDir 'logs'
+    $script:ActiveStepLog = $null
     [System.IO.Directory]::CreateDirectory($script:LogsDir) | Out-Null
     # Keep only the latest run: wipe previous step logs before writing fresh ones.
     Get-ChildItem -LiteralPath $script:LogsDir -File -Force -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -like '*.log' } |
         Remove-Item -Force -ErrorAction SilentlyContinue
     Write-Host ("  Adim loglari          : " + $script:LogsDir) -ForegroundColor Gray
+    Append-PipelineLog 'RUN_START'
 }
 
 function Write-StepLog([string]$LogName, [string]$Content) {
@@ -68,18 +69,75 @@ function Write-StepLog([string]$LogName, [string]$Content) {
     Write-Utf8NoBom -FilePath (Join-Path $script:LogsDir ($safeName + '.log')) -Content $(if ($null -eq $Content) { '' } else { $Content })
 }
 
+function Append-PipelineLog([string]$Message) {
+    if ([string]::IsNullOrWhiteSpace($script:LogsDir)) { return }
+    $line = '[{0}] {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message
+    Add-Content -LiteralPath (Join-Path $script:LogsDir 'pipeline.log') -Value $line -Encoding utf8
+}
+
+function Enter-PipelineStep([string]$StepName) {
+    $script:ActiveStepLog = $StepName
+    Append-PipelineLog ("ENTER $StepName")
+}
+
+function Exit-PipelineStep([string]$StepName, [string]$Result = 'PASS') {
+    Append-PipelineLog ("EXIT  $StepName result=$Result")
+    if ($script:ActiveStepLog -eq $StepName) { $script:ActiveStepLog = $null }
+}
+
+function Write-FailAndExit([string]$Message) {
+    Write-Host "`n  [HATA] $Message" -ForegroundColor Red
+    $active = $script:ActiveStepLog
+    if (-not [string]::IsNullOrWhiteSpace($script:LogsDir)) {
+        $errBody = @(
+            'result=FAIL'
+            "active_step=$active"
+            "error=$Message"
+        ) -join [Environment]::NewLine
+        Write-StepLog -LogName 'error' -Content $errBody
+        if (-not [string]::IsNullOrWhiteSpace($active)) {
+            $stepPath = Join-Path $script:LogsDir ($active + '.log')
+            if (Test-Path -LiteralPath $stepPath) {
+                Add-Content -LiteralPath $stepPath -Value ([Environment]::NewLine + $errBody) -Encoding utf8
+            } else {
+                Write-StepLog -LogName $active -Content $errBody
+            }
+        }
+        Append-PipelineLog ("FAIL  active=$active error=$Message")
+    }
+    exit 1
+}
+
 function Invoke-LoggedCommand {
     param(
         [Parameter(Mandatory = $true)][string]$LogName,
         [Parameter(Mandatory = $true)][scriptblock]$Command
     )
-    $output = @(& $Command 2>&1)
-    $exitCode = $LASTEXITCODE
-    $lines = @($output | ForEach-Object { "$_" })
-    Write-StepLog -LogName $LogName -Content ($lines -join [Environment]::NewLine)
-    foreach ($line in $lines) { Write-Host $line }
-    if ($null -eq $exitCode) { return 0 }
-    return [int]$exitCode
+    Enter-PipelineStep $LogName
+    try {
+        $output = @(& $Command 2>&1)
+        $exitCode = $LASTEXITCODE
+        if ($null -eq $exitCode) { $exitCode = 0 }
+        $lines = [System.Collections.Generic.List[string]]::new()
+        foreach ($item in @($output)) { $lines.Add("$_") }
+        $lines.Add('')
+        $lines.Add("exit_code=$exitCode")
+        $result = if ([int]$exitCode -eq 0) { 'PASS' } else { 'FAIL' }
+        $lines.Add("result=$result")
+        Write-StepLog -LogName $LogName -Content ($lines -join [Environment]::NewLine)
+        foreach ($line in $output) { Write-Host $line }
+        Exit-PipelineStep $LogName $result
+        return [int]$exitCode
+    } catch {
+        $failBody = @(
+            'result=FAIL'
+            "error=$($_.Exception.Message)"
+        ) -join [Environment]::NewLine
+        Write-StepLog -LogName $LogName -Content $failBody
+        Write-StepLog -LogName 'error' -Content $failBody
+        Exit-PipelineStep $LogName 'FAIL'
+        throw
+    }
 }
 
 function Read-TimedKey([string]$PromptPrefix, [int]$Seconds = 6) {
@@ -125,6 +183,7 @@ if ($CliTokens -contains '--help') {
     Write-Host '--self-test: dahili sertifika, paket ve yayin testlerini calistirir.'
     Write-Host '--no-open, --commit, --push, --no-push (yerel commit), --no-git (varsayilan)'
     Write-Host 'Per-step logs: build\logs\ (latest run only; previous *.log files are deleted at start).'
+    Write-Host 'Includes pipeline.log, error.log, *-version.log, analyze/test/apk logs when those steps run.'
     exit 0
 }
 $AllowedSwitches = @('--pos','--ventopos','--keygen','--both','--all','--pos-version','--keygen-version','--version','--verify-only','--self-test','--no-open','--no-push','--no-git','--commit','--push')
@@ -630,11 +689,13 @@ function Invoke-ReleaseSelfTest {
 # ---------------------------------------------------------------------------
 function Invoke-VentoPosPipeline {
     Write-Section "BOLUM A: VENTOPOS (MUSTERI UYGULAMASI) SAFE RELEASE PIPELINE"
+    Append-PipelineLog 'SECTION pos-pipeline'
     Push-Location $PosRoot
     try {
         $pubGetExit = Invoke-LoggedCommand -LogName 'pos-pub-get' -Command { & $FlutterBin pub get }
-        if ($pubGetExit -ne 0) { throw "Bagimliliklar yuklenemedi." }
+        if ($pubGetExit -ne 0) { Write-FailAndExit "Bagimliliklar yuklenemedi." }
         # ADIM 1: Guvenlik Kapilari
+        Enter-PipelineStep 'pos-gates'
         Write-SubHeader "[VentoPOS 1/5] Yerinde Guncelleme (In-Place Upgrade) Denetimi"
         $BuildGradlePath = Join-Path $PosRoot "android\app\build.gradle.kts"
         $KeyPropsPath    = Join-Path $PosRoot "android\key.properties"
@@ -681,38 +742,66 @@ function Invoke-VentoPosPipeline {
             }
         }
 
+        Write-StepLog -LogName 'pos-gates' -Content (@('result=PASS', 'checks=keystore,sqlite,ed25519,sibling_public_key') -join [Environment]::NewLine)
+        Exit-PipelineStep 'pos-gates' 'PASS'
+
         if (-not $SkipCodegen) {
-            $codegenExit = Invoke-LoggedCommand -LogName 'pos-codegen' -Command { & $DartBin run build_runner build --delete-conflicting-outputs }
+            $codegenExit = Invoke-LoggedCommand -LogName 'pos-codegen' -Command { & $DartBin run build_runner build }
             if ($codegenExit -ne 0) { Write-FailAndExit "VentoPOS build_runner basarisiz oldu!" }
         }
         Write-Pass "VentoPOS guvenlik kapilari (Keystore, SQLite, Ed25519, Codegen) dogrulandi."
 
         # ADIM 2: Surum Artirma ve Senkronizasyon
+        Enter-PipelineStep 'pos-version'
         Write-SubHeader "[VentoPOS 2/5] Surum Artirma ve Senkronizasyon"
-        $PubspecPath = Join-Path $PosRoot "pubspec.yaml"
-        $AppInfoPath = Join-Path $PosRoot "lib\core\constants\app_info_constants.dart"
-        $PubspecRaw  = [System.IO.File]::ReadAllText($PubspecPath, [System.Text.Encoding]::UTF8)
-        if ($PubspecRaw -notmatch '(?m)^version:\s*(\d+\.\d+\.\d+\+\d+)') {
-            Write-FailAndExit "VentoPOS pubspec.yaml icinde version okunamadi!"
-        }
-        $CurFullSpec = $Matches[1]
-        $TargetSpec  = Select-NextVersionSpec -AppName "VentoPOS" -RepoDir $PosRoot -PubspecRaw $PubspecRaw -ForcedSpec $ForcedPosVersion -PreviousBuild $PreviousBuilds['VentoPOS']
+        $versionLog = [System.Collections.Generic.List[string]]::new()
+        try {
+            $PubspecPath = Join-Path $PosRoot "pubspec.yaml"
+            $AppInfoPath = Join-Path $PosRoot "lib\core\constants\app_info_constants.dart"
+            $PubspecRaw  = [System.IO.File]::ReadAllText($PubspecPath, [System.Text.Encoding]::UTF8)
+            if ($PubspecRaw -notmatch '(?m)^version:\s*(\d+\.\d+\.\d+\+\d+)') {
+                Write-FailAndExit "VentoPOS pubspec.yaml icinde version okunamadi!"
+            }
+            $CurFullSpec = $Matches[1]
+            $versionLog.Add("current=$CurFullSpec")
+            $versionLog.Add("previous_build=$($PreviousBuilds['VentoPOS'])")
+            $versionLog.Add("forced=$ForcedPosVersion")
+            $TargetSpec  = Select-NextVersionSpec -AppName "VentoPOS" -RepoDir $PosRoot -PubspecRaw $PubspecRaw -ForcedSpec $ForcedPosVersion -PreviousBuild $PreviousBuilds['VentoPOS']
+            $versionLog.Add("selected=$TargetSpec")
 
-        Assert-UpgradeBuild $TargetSpec $PreviousBuilds['VentoPOS']
-        $SpecParts = $TargetSpec -split '\+'
-        $VerName   = $SpecParts[0]
-        $VerCode   = [int]$SpecParts[1]
+            Assert-UpgradeBuild $TargetSpec $PreviousBuilds['VentoPOS']
+            $versionLog.Add('assert_upgrade_build=PASS')
+            $SpecParts = $TargetSpec -split '\+'
+            $VerName   = $SpecParts[0]
+            $VerCode   = [int]$SpecParts[1]
 
-        if ($TargetSpec -ne $CurFullSpec) {
-            $PubspecUpdated = [regex]::Replace($PubspecRaw, '(?m)^version:\s*[^\r\n]+', "version: $TargetSpec", 1)
-            Write-Utf8NoBom -FilePath $PubspecPath -Content $PubspecUpdated
+            if ($TargetSpec -ne $CurFullSpec) {
+                $PubspecUpdated = [regex]::Replace($PubspecRaw, '(?m)^version:\s*[^\r\n]+', "version: $TargetSpec", 1)
+                Write-Utf8NoBom -FilePath $PubspecPath -Content $PubspecUpdated
+                $versionLog.Add("pubspec_updated=$TargetSpec")
+            } else {
+                $versionLog.Add('pubspec_updated=unchanged')
+            }
+            $AppInfoRaw = [System.IO.File]::ReadAllText($AppInfoPath, [System.Text.Encoding]::UTF8)
+            $AppInfoUpdated = [regex]::Replace($AppInfoRaw, "fallbackPubspecVersionSpec\s*=\s*'[^']*'", "fallbackPubspecVersionSpec = '$TargetSpec'", 1)
+            if ($AppInfoUpdated -ne $AppInfoRaw) {
+                Write-Utf8NoBom -FilePath $AppInfoPath -Content $AppInfoUpdated
+                $versionLog.Add("app_info_updated=$TargetSpec")
+            } else {
+                $versionLog.Add('app_info_updated=unchanged')
+            }
+            $versionLog.Add('result=PASS')
+            Write-StepLog -LogName 'pos-version' -Content ($versionLog -join [Environment]::NewLine)
+            Exit-PipelineStep 'pos-version' 'PASS'
+            Write-Pass "VentoPOS surumu senkronize edildi: $TargetSpec"
+        } catch {
+            $versionLog.Add('result=FAIL')
+            $versionLog.Add("error=$($_.Exception.Message)")
+            Write-StepLog -LogName 'pos-version' -Content ($versionLog -join [Environment]::NewLine)
+            Write-StepLog -LogName 'error' -Content ($versionLog -join [Environment]::NewLine)
+            Exit-PipelineStep 'pos-version' 'FAIL'
+            throw
         }
-        $AppInfoRaw = [System.IO.File]::ReadAllText($AppInfoPath, [System.Text.Encoding]::UTF8)
-        $AppInfoUpdated = [regex]::Replace($AppInfoRaw, "fallbackPubspecVersionSpec\s*=\s*'[^']*'", "fallbackPubspecVersionSpec = '$TargetSpec'", 1)
-        if ($AppInfoUpdated -ne $AppInfoRaw) {
-            Write-Utf8NoBom -FilePath $AppInfoPath -Content $AppInfoUpdated
-        }
-        Write-Pass "VentoPOS surumu senkronize edildi: $TargetSpec"
 
         # ADIM 3: Analiz ve Testler
         Write-SubHeader "[VentoPOS 3/5] flutter analyze & flutter test"
@@ -769,11 +858,13 @@ function Invoke-VentoPosPipeline {
 # ---------------------------------------------------------------------------
 function Invoke-VentoKeygenPipeline {
     Write-Section "BOLUM B: VENTOPOS_KEYGEN (YONETICI UYGULAMASI) SAFE RELEASE PIPELINE"
+    Append-PipelineLog 'SECTION keygen-pipeline'
     Push-Location $KeygenRoot
     try {
         $pubGetExit = Invoke-LoggedCommand -LogName 'keygen-pub-get' -Command { & $FlutterBin pub get }
-        if ($pubGetExit -ne 0) { throw "Bagimliliklar yuklenemedi." }
+        if ($pubGetExit -ne 0) { Write-FailAndExit "Bagimliliklar yuklenemedi." }
         # ADIM 1: 5 Guvenlik Kapisi
+        Enter-PipelineStep 'keygen-gates'
         Write-SubHeader "[Keygen 1/5] Guvenlik, Ed25519 Kripto ve Yerinde Guncelleme Denetimi"
         $BuildGradlePath = Join-Path $KeygenRoot "android\app\build.gradle.kts"
         $KeyPropsPath    = Join-Path $KeygenRoot "android\key.properties"
@@ -862,36 +953,63 @@ function Invoke-VentoKeygenPipeline {
         if (-not (Test-Path (Join-Path $KeygenRoot "test\keygen_onboarding_and_update_test.dart"))) {
             Write-FailAndExit "Keygen Gate 5: test\keygen_onboarding_and_update_test.dart bulunamadi!"
         }
+        Write-StepLog -LogName 'keygen-gates' -Content (@('result=PASS', 'checks=keystore,ed25519,sharedprefs,offline,obfuscate,test_fixture') -join [Environment]::NewLine)
+        Exit-PipelineStep 'keygen-gates' 'PASS'
         Write-Pass "Keygen 5 guvenlik kapisi (Keystore, Ed25519 Seed, SharedPrefs, Offline/Obfuscate, Test) dogrulandi."
 
         # ADIM 2: Surum Artirma ve Senkronizasyon
+        Enter-PipelineStep 'keygen-version'
         Write-SubHeader "[Keygen 2/5] Surum Artirma ve Senkronizasyon"
-        $PubspecPath = Join-Path $KeygenRoot "pubspec.yaml"
-        $PubspecRaw  = [System.IO.File]::ReadAllText($PubspecPath, [System.Text.Encoding]::UTF8)
-        if ($PubspecRaw -notmatch '(?m)^version:\s*(\d+\.\d+\.\d+\+\d+)') {
-            Write-FailAndExit "Keygen pubspec.yaml icinde version okunamadi!"
-        }
-        $CurFullSpec = $Matches[1]
-        $TargetSpec  = Select-NextVersionSpec -AppName "VentoPOS_Keygen" -RepoDir $KeygenRoot -PubspecRaw $PubspecRaw -ForcedSpec $ForcedKeygenVersion -PreviousBuild $PreviousBuilds['VentoPOS_Keygen']
+        $versionLog = [System.Collections.Generic.List[string]]::new()
+        try {
+            $PubspecPath = Join-Path $KeygenRoot "pubspec.yaml"
+            $PubspecRaw  = [System.IO.File]::ReadAllText($PubspecPath, [System.Text.Encoding]::UTF8)
+            if ($PubspecRaw -notmatch '(?m)^version:\s*(\d+\.\d+\.\d+\+\d+)') {
+                Write-FailAndExit "Keygen pubspec.yaml icinde version okunamadi!"
+            }
+            $CurFullSpec = $Matches[1]
+            $versionLog.Add("current=$CurFullSpec")
+            $versionLog.Add("previous_build=$($PreviousBuilds['VentoPOS_Keygen'])")
+            $versionLog.Add("forced=$ForcedKeygenVersion")
+            $TargetSpec  = Select-NextVersionSpec -AppName "VentoPOS_Keygen" -RepoDir $KeygenRoot -PubspecRaw $PubspecRaw -ForcedSpec $ForcedKeygenVersion -PreviousBuild $PreviousBuilds['VentoPOS_Keygen']
+            $versionLog.Add("selected=$TargetSpec")
 
-        Assert-UpgradeBuild $TargetSpec $PreviousBuilds['VentoPOS_Keygen']
-        $SpecParts        = $TargetSpec -split '\+'
-        $FinalVersionName = $SpecParts[0]
-        $FinalVersionCode = [int]$SpecParts[1]
+            Assert-UpgradeBuild $TargetSpec $PreviousBuilds['VentoPOS_Keygen']
+            $versionLog.Add('assert_upgrade_build=PASS')
+            $SpecParts        = $TargetSpec -split '\+'
+            $FinalVersionName = $SpecParts[0]
+            $FinalVersionCode = [int]$SpecParts[1]
 
-        if ($TargetSpec -ne $CurFullSpec) {
-            $UpdatedPubspec = [regex]::Replace($PubspecRaw, '(?m)^version:\s*[^\r\n]+', "version: $TargetSpec", 1)
-            Write-Utf8NoBom -FilePath $PubspecPath -Content $UpdatedPubspec
-        }
+            if ($TargetSpec -ne $CurFullSpec) {
+                $UpdatedPubspec = [regex]::Replace($PubspecRaw, '(?m)^version:\s*[^\r\n]+', "version: $TargetSpec", 1)
+                Write-Utf8NoBom -FilePath $PubspecPath -Content $UpdatedPubspec
+                $versionLog.Add("pubspec_updated=$TargetSpec")
+            } else {
+                $versionLog.Add('pubspec_updated=unchanged')
+            }
 
-        $UpdatedKeygenConst = $KeygenConstText
-        $UpdatedKeygenConst = [regex]::Replace($UpdatedKeygenConst, "static\s+const\s+String\s+appVersion\s*=\s*'[^']*';", "static const String appVersion = '$FinalVersionName';", 1)
-        $UpdatedKeygenConst = [regex]::Replace($UpdatedKeygenConst, "static\s+const\s+int\s+appBuildNumber\s*=\s*\d+;", "static const int appBuildNumber = $FinalVersionCode;", 1)
-        $UpdatedKeygenConst = [regex]::Replace($UpdatedKeygenConst, "static\s+const\s+String\s+appFullVersion\s*=\s*'[^']*';", "static const String appFullVersion = '$TargetSpec';", 1)
-        if ($UpdatedKeygenConst -ne $KeygenConstText) {
-            Write-Utf8NoBom -FilePath $KeygenConstPath -Content $UpdatedKeygenConst
+            $UpdatedKeygenConst = $KeygenConstText
+            $UpdatedKeygenConst = [regex]::Replace($UpdatedKeygenConst, "static\s+const\s+String\s+appVersion\s*=\s*'[^']*';", "static const String appVersion = '$FinalVersionName';", 1)
+            $UpdatedKeygenConst = [regex]::Replace($UpdatedKeygenConst, "static\s+const\s+int\s+appBuildNumber\s*=\s*\d+;", "static const int appBuildNumber = $FinalVersionCode;", 1)
+            $UpdatedKeygenConst = [regex]::Replace($UpdatedKeygenConst, "static\s+const\s+String\s+appFullVersion\s*=\s*'[^']*';", "static const String appFullVersion = '$TargetSpec';", 1)
+            if ($UpdatedKeygenConst -ne $KeygenConstText) {
+                Write-Utf8NoBom -FilePath $KeygenConstPath -Content $UpdatedKeygenConst
+                $versionLog.Add("keygen_constants_updated=$TargetSpec")
+            } else {
+                $versionLog.Add('keygen_constants_updated=unchanged')
+            }
+            $versionLog.Add('result=PASS')
+            Write-StepLog -LogName 'keygen-version' -Content ($versionLog -join [Environment]::NewLine)
+            Exit-PipelineStep 'keygen-version' 'PASS'
+            Write-Pass "Keygen surumu ve KeygenConstants senkronize edildi: $TargetSpec"
+        } catch {
+            $versionLog.Add('result=FAIL')
+            $versionLog.Add("error=$($_.Exception.Message)")
+            Write-StepLog -LogName 'keygen-version' -Content ($versionLog -join [Environment]::NewLine)
+            Write-StepLog -LogName 'error' -Content ($versionLog -join [Environment]::NewLine)
+            Exit-PipelineStep 'keygen-version' 'FAIL'
+            throw
         }
-        Write-Pass "Keygen surumu ve KeygenConstants senkronize edildi: $TargetSpec"
 
         # ADIM 3: Analiz ve Testler
         Write-SubHeader "[Keygen 3/5] flutter analyze & flutter test"
@@ -948,14 +1066,19 @@ function Invoke-VentoKeygenPipeline {
 # ---------------------------------------------------------------------------
 # Secilen Hedefleri Calistir ve Ortak Sonuc Raporu Uret
 # ---------------------------------------------------------------------------
-if (($CliTokens -contains '--version') -and $BuildPos -and $BuildKeygen) { throw '--version tek hedef gerektirir; iki hedef icin ayri surum belirtin.' }
+if (($CliTokens -contains '--version') -and $BuildPos -and $BuildKeygen) { Write-FailAndExit '--version tek hedef gerektirir; iki hedef icin ayri surum belirtin.' }
 if ($SelfTest) {
+    Enter-PipelineStep 'selftest'
     try {
         Invoke-ReleaseSelfTest
         Write-StepLog -LogName 'selftest' -Content 'result=PASS'
+        Exit-PipelineStep 'selftest' 'PASS'
+        Append-PipelineLog 'RUN_END result=PASS'
         exit 0
     } catch {
         Write-StepLog -LogName 'selftest' -Content (("result=FAIL" + [Environment]::NewLine + "error=$($_.Exception.Message)"))
+        Write-StepLog -LogName 'error' -Content (("result=FAIL" + [Environment]::NewLine + "error=$($_.Exception.Message)"))
+        Exit-PipelineStep 'selftest' 'FAIL'
         throw
     }
 }
@@ -964,15 +1087,38 @@ if (-not $VerifyOnly) {
     try { $mutexSuffix = ([BitConverter]::ToString($mutexHasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($UmbrellaRoot.ToLowerInvariant())))).Replace('-','') } finally { $mutexHasher.Dispose() }
     $ReleaseMutex = New-Object Threading.Mutex($false, ('Local\VentoUnifiedRelease-' + $mutexSuffix))
     try { $acquired = $ReleaseMutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $acquired = $true }
-    if (-not $acquired) { throw 'Bu calisma alaninda baska bir release islemi suruyor.' }
+    if (-not $acquired) { Write-FailAndExit 'Bu calisma alaninda baska bir release islemi suruyor.' }
 }
-if ($BuildPos) { Invoke-ReleasePreflight 'VentoPOS' $PosRoot 'com.ventopos.ventopos' }
-if ($BuildKeygen) { Invoke-ReleasePreflight 'VentoPOS_Keygen' $KeygenRoot 'com.ventopos.ventopos_keygen' }
-if ($VerifyOnly) { Write-Pass 'Secilen mevcut APKlar ve guvenlik kapilari dogrulandi; dosya degistirilmedi.'; exit 0 }
+if ($BuildPos) {
+    Enter-PipelineStep 'pos-preflight'
+    try {
+        Invoke-ReleasePreflight 'VentoPOS' $PosRoot 'com.ventopos.ventopos'
+        Exit-PipelineStep 'pos-preflight' 'PASS'
+    } catch {
+        Exit-PipelineStep 'pos-preflight' 'FAIL'
+        Write-FailAndExit $_.Exception.Message
+    }
+}
+if ($BuildKeygen) {
+    Enter-PipelineStep 'keygen-preflight'
+    try {
+        Invoke-ReleasePreflight 'VentoPOS_Keygen' $KeygenRoot 'com.ventopos.ventopos_keygen'
+        Exit-PipelineStep 'keygen-preflight' 'PASS'
+    } catch {
+        Exit-PipelineStep 'keygen-preflight' 'FAIL'
+        Write-FailAndExit $_.Exception.Message
+    }
+}
+if ($VerifyOnly) {
+    Write-Pass 'Secilen mevcut APKlar ve guvenlik kapilari dogrulandi; dosya degistirilmedi.'
+    Append-PipelineLog 'RUN_END result=PASS verify-only'
+    exit 0
+}
 $Results = @()
 if ($BuildPos) { $Results += (Invoke-VentoPosPipeline) }
 if ($BuildKeygen) { $Results += (Invoke-VentoKeygenPipeline) }
 $packageLog = New-Object System.Collections.Generic.List[string]
+Enter-PipelineStep 'package'
 try {
     $Package = New-UpdatePackage $Results (Join-Path $UmbrellaRoot 'dist')
     $packageLog.Add("output_root=$(Join-Path $UmbrellaRoot 'dist')")
@@ -987,10 +1133,13 @@ try {
     }
     $packageLog.Add('result=PASS')
     Write-StepLog -LogName 'package' -Content ($packageLog -join [Environment]::NewLine)
+    Exit-PipelineStep 'package' 'PASS'
 } catch {
     $packageLog.Add('result=FAIL')
     $packageLog.Add("error=$($_.Exception.Message)")
     Write-StepLog -LogName 'package' -Content ($packageLog -join [Environment]::NewLine)
+    Write-StepLog -LogName 'error' -Content ($packageLog -join [Environment]::NewLine)
+    Exit-PipelineStep 'package' 'FAIL'
     throw
 }
 if (-not $NoGit) {
@@ -1024,6 +1173,7 @@ if (-not $NoGit) {
 }
 Write-Pass "Dogrulanmis guncelleme paketi: $($Package.Zip)"
 foreach ($applicationPackage in $Package.ApplicationPackages) { Write-Pass "Uygulamaya ozel paket: $($applicationPackage.Zip)" }
+Append-PipelineLog 'RUN_END result=PASS'
 
 Write-Section "UNIFIED SAFE RELEASE SONUC RAPORU"
 foreach ($r in $Results) {

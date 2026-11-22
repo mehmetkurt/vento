@@ -2,7 +2,7 @@
 
 Root `build.bat` is the ergonomic entry point; it forwards all arguments to `build/vento-unified-safe-release.bat`. That script is the only release implementation for both independent repositories. All checks, build orchestration, APK verification, and update packaging live in its embedded PowerShell payload. No standalone release `.ps1` file is required.
 
-Each run writes **latest-only** per-step logs under `build/logs/` (previous `*.log` files are deleted at start). Typical names: `pos-preflight.log`, `pos-pub-get.log`, `pos-codegen.log`, `pos-analyze.log`, `pos-test.log`, `pos-apk.log`, `keygen-preflight.log`, `keygen-pub-get.log`, `keygen-analyze.log`, `keygen-test.log`, `keygen-apk.log`, `package.log`, `git.log`, `selftest.log`.
+Each run writes **latest-only** per-step logs under `build/logs/` (previous `*.log` files are deleted at start). Typical names: `pipeline.log` (step enter/exit timestamps), `error.log` (last hard failure), `pos-preflight.log`, `pos-pub-get.log`, `pos-gates.log`, `pos-codegen.log`, `pos-version.log`, `pos-analyze.log`, `pos-test.log`, `pos-apk.log`, `keygen-preflight.log`, `keygen-pub-get.log`, `keygen-gates.log`, `keygen-version.log`, `keygen-analyze.log`, `keygen-test.log`, `keygen-apk.log`, `package.log`, `git.log`, `selftest.log`. Analyze/test/apk logs appear only after those steps start; if a run stops earlier, inspect `pipeline.log` and `pos-version.log` / `error.log`.
 
 ## Usage
 

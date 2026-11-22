@@ -117,38 +117,60 @@ function Invoke-LoggedCommand {
     # Native tools (flutter analyze/test/build) write diagnostics to stderr.
     # With $ErrorActionPreference=Stop those lines become terminating ErrorRecords
     # and the catch path used to overwrite step logs with only "result=FAIL".
+    #
+    # Stream stdout/stderr to the console AND the step log as each line arrives.
+    # Do NOT assign @(& $Command 2>&1) — that buffers until process exit (no live
+    # feedback during long flutter test / apk steps).
     $prevEap = $ErrorActionPreference
-    $captured = [System.Collections.Generic.List[string]]::new()
     $exitCode = 1
+    $safeName = ($LogName -replace '[\\/:*?"<>|]', '_').Trim()
+    if ([string]::IsNullOrWhiteSpace($safeName)) { $safeName = 'step' }
+    if ([string]::IsNullOrWhiteSpace($script:LogsDir)) {
+        Write-FailAndExit 'Invoke-LoggedCommand: LogsDir is not initialized.'
+    }
+    $logPath = Join-Path $script:LogsDir ($safeName + '.log')
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $writer = $null
     try {
+        $writer = New-Object System.IO.StreamWriter($logPath, $false, $utf8NoBom)
+        $writer.AutoFlush = $true
         $ErrorActionPreference = 'Continue'
-        $rawOutput = @(& $Command 2>&1)
-        if ($null -eq $LASTEXITCODE) { $exitCode = 0 } else { $exitCode = [int]$LASTEXITCODE }
-        foreach ($item in $rawOutput) {
-            if ($null -eq $item) { continue }
-            if ($item -is [System.Management.Automation.ErrorRecord]) {
-                $captured.Add([string]$item.ToString())
+        & $Command 2>&1 | ForEach-Object {
+            if ($null -eq $_) { return }
+            $line = if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                [string]$_.ToString()
             } else {
-                $captured.Add([string]$item)
+                [string]$_
             }
+            Write-Host $line
+            $writer.WriteLine($line)
         }
+        if ($null -eq $LASTEXITCODE) { $exitCode = 0 } else { $exitCode = [int]$LASTEXITCODE }
     } catch {
-        $captured.Add("exception=$($_.Exception.Message)")
+        $exLine = "exception=$($_.Exception.Message)"
+        Write-Host $exLine
+        if ($null -ne $writer) { $writer.WriteLine($exLine) }
         if (-not [string]::IsNullOrWhiteSpace($_.ScriptStackTrace)) {
-            $captured.Add($_.ScriptStackTrace)
+            Write-Host $_.ScriptStackTrace
+            if ($null -ne $writer) { $writer.WriteLine($_.ScriptStackTrace) }
         }
         if ($null -eq $LASTEXITCODE) { $exitCode = 1 } else { $exitCode = [int]$LASTEXITCODE }
         if ($exitCode -eq 0) { $exitCode = 1 }
     } finally {
         $ErrorActionPreference = $prevEap
         $result = if ([int]$exitCode -eq 0) { 'PASS' } else { 'FAIL' }
-        $logLines = [System.Collections.Generic.List[string]]::new()
-        foreach ($line in $captured) { $logLines.Add($line) }
-        $logLines.Add('')
-        $logLines.Add("exit_code=$exitCode")
-        $logLines.Add("result=$result")
-        Write-StepLog -LogName $LogName -Content ($logLines -join [Environment]::NewLine)
-        foreach ($line in $captured) { Write-Host $line }
+        if ($null -ne $writer) {
+            try {
+                $writer.WriteLine('')
+                $writer.WriteLine("exit_code=$exitCode")
+                $writer.WriteLine("result=$result")
+            } catch { }
+            try { $writer.Dispose() } catch { }
+            $writer = $null
+        } else {
+            # Writer failed to open — still persist FAIL/PASS footer via Write-StepLog.
+            Write-StepLog -LogName $LogName -Content (@('', "exit_code=$exitCode", "result=$result") -join [Environment]::NewLine)
+        }
         Exit-PipelineStep $LogName $result
     }
     return [int]$exitCode

@@ -114,30 +114,44 @@ function Invoke-LoggedCommand {
         [Parameter(Mandatory = $true)][scriptblock]$Command
     )
     Enter-PipelineStep $LogName
+    # Native tools (flutter analyze/test/build) write diagnostics to stderr.
+    # With $ErrorActionPreference=Stop those lines become terminating ErrorRecords
+    # and the catch path used to overwrite step logs with only "result=FAIL".
+    $prevEap = $ErrorActionPreference
+    $captured = [System.Collections.Generic.List[string]]::new()
+    $exitCode = 1
     try {
-        $output = @(& $Command 2>&1)
-        $exitCode = $LASTEXITCODE
-        if ($null -eq $exitCode) { $exitCode = 0 }
-        $lines = [System.Collections.Generic.List[string]]::new()
-        foreach ($item in @($output)) { $lines.Add("$_") }
-        $lines.Add('')
-        $lines.Add("exit_code=$exitCode")
-        $result = if ([int]$exitCode -eq 0) { 'PASS' } else { 'FAIL' }
-        $lines.Add("result=$result")
-        Write-StepLog -LogName $LogName -Content ($lines -join [Environment]::NewLine)
-        foreach ($line in $output) { Write-Host $line }
-        Exit-PipelineStep $LogName $result
-        return [int]$exitCode
+        $ErrorActionPreference = 'Continue'
+        $rawOutput = @(& $Command 2>&1)
+        if ($null -eq $LASTEXITCODE) { $exitCode = 0 } else { $exitCode = [int]$LASTEXITCODE }
+        foreach ($item in $rawOutput) {
+            if ($null -eq $item) { continue }
+            if ($item -is [System.Management.Automation.ErrorRecord]) {
+                $captured.Add([string]$item.ToString())
+            } else {
+                $captured.Add([string]$item)
+            }
+        }
     } catch {
-        $failBody = @(
-            'result=FAIL'
-            "error=$($_.Exception.Message)"
-        ) -join [Environment]::NewLine
-        Write-StepLog -LogName $LogName -Content $failBody
-        Write-StepLog -LogName 'error' -Content $failBody
-        Exit-PipelineStep $LogName 'FAIL'
-        throw
+        $captured.Add("exception=$($_.Exception.Message)")
+        if (-not [string]::IsNullOrWhiteSpace($_.ScriptStackTrace)) {
+            $captured.Add($_.ScriptStackTrace)
+        }
+        if ($null -eq $LASTEXITCODE) { $exitCode = 1 } else { $exitCode = [int]$LASTEXITCODE }
+        if ($exitCode -eq 0) { $exitCode = 1 }
+    } finally {
+        $ErrorActionPreference = $prevEap
+        $result = if ([int]$exitCode -eq 0) { 'PASS' } else { 'FAIL' }
+        $logLines = [System.Collections.Generic.List[string]]::new()
+        foreach ($line in $captured) { $logLines.Add($line) }
+        $logLines.Add('')
+        $logLines.Add("exit_code=$exitCode")
+        $logLines.Add("result=$result")
+        Write-StepLog -LogName $LogName -Content ($logLines -join [Environment]::NewLine)
+        foreach ($line in $captured) { Write-Host $line }
+        Exit-PipelineStep $LogName $result
     }
+    return [int]$exitCode
 }
 
 function Read-TimedKey([string]$PromptPrefix, [int]$Seconds = 6) {

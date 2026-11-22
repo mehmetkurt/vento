@@ -29,7 +29,12 @@ $RECYCLE.BIN/
 
 # Centralized Release & Build Outputs
 /dist/
-/build/
+# Keep tracked release tooling under build\; ignore other build artifacts and last-run logs.
+/build/*
+!/build/vento-unified-safe-release.bat
+!/build/logs/
+/build/logs/*
+!/build/logs/.gitkeep
 /debug_symbols/
 *.apk
 *.aab

@@ -7,7 +7,7 @@ description: Audits in-place Android APK upgrade safety, verifies Drift SQLite s
 
 Executes an end-to-end pre-release safety audit, version synchronization, production-signed obfuscated APK build, and `/git-commit-and-push` workflow for **VentoPOS** (`package:ventopos`, `com.ventopos.ventopos`).
 
-**Working directories**: The umbrella workspace root is `D:\projects\vento`. Flutter analyze/test/build commands and relative paths in the gate table below run from **`ventoPOS/`** unless noted. The unified release entry point `vento-unified-safe-release.bat` lives at the umbrella root.
+**Working directories**: The umbrella workspace root is `D:\projects\vento`. Flutter analyze/test/build commands and relative paths in the gate table below run from **`ventoPOS/`** unless noted. The unified release entry point is root `build.bat`, which calls `build\vento-unified-safe-release.bat`. Per-step latest-run logs land in `build\logs\`.
 
 ## Non-Negotiable Core Principle: Never Break Installed Field Apps
 
@@ -72,12 +72,12 @@ flutter test
 1. Run the single workspace release entry point. Its PowerShell payload is embedded in the BAT; do not create or invoke standalone release PS1 files:
 
 ```powershell
-D:\projects\vento\vento-unified-safe-release.bat --pos --no-open
+D:\projects\vento\build.bat --pos --no-open
 ```
 
    *(If running on macOS or Linux without PowerShell, execute the exact equivalent pipeline: `flutter build apk --release --obfuscate --split-debug-info=debug_symbols/ventopos` and copy `build/app/outputs/flutter-apk/app-release.apk` to both `dist/VentoPOS-release.apk` and `dist/VentoPOS-v<Version>-build<Build>-release.apk`.)*
 
-2. The BAT embeds strict APK verification and writes a versioned update folder, ZIP, SHA-256 files, and manifest under the workspace `dist/`. It updates repository APK aliases only after all selected applications and the archive pass verification. Git commit/push is opt-in through `--commit` or `--push`. Perform post-build binary verification on `dist/VentoPOS-release.apk`:
+2. The BAT embeds strict APK verification and writes a versioned update folder, ZIP, SHA-256 files, and manifest under the workspace `dist/`. Step logs for the latest run are under `build\logs\` (for example `pos-analyze.log`, `pos-test.log`, `pos-apk.log`). It updates repository APK aliases only after all selected applications and the archive pass verification. Git commit/push is opt-in through `--commit` or `--push`. Perform post-build binary verification on `dist/VentoPOS-release.apk`:
    - Confirm the APK file exists on disk with a valid non-zero size.
    - Verify `package: name='com.ventopos.ventopos'`, `versionCode`, and `versionName` via `aapt dump badging` or Gradle build metadata.
    - Run `apksigner verify --print-certs dist/VentoPOS-release.apk` and confirm the APK is signed with the **Production Release Keystore** (strictly reject `CN=Android Debug`).

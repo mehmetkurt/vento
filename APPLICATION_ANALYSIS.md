@@ -360,7 +360,7 @@ Satır sayısı tek başına refaktör gerekçesi değildir. Ancak müşteri, si
 
 ## 14. Sürüm ve dağıtım araçları
 
-Kökteki `vento-unified-safe-release.bat` iki projeyi seçilebilir olarak ele alıyor. Kaynakta sürüm/build düzenleme, güvenlik kapıları, kod üretimi, analiz, test, obfuscation, APK oluşturma, paket/sürüm kontrolü ve Git commit/push adımları var. POS altında daha küçük bir `scripts/build_release_apks.ps1`, Keygen altında ayrı release betiği de bulunuyor.
+Kök `build.bat` → `build/vento-unified-safe-release.bat` iki projeyi seçilebilir olarak ele alıyor. Kaynakta sürüm/build düzenleme, güvenlik kapıları, kod üretimi, analiz, test, obfuscation, APK oluşturma, paket/sürüm kontrolü ve Git commit/push adımları var. POS altında daha küçük bir `scripts/build_release_apks.ps1`, Keygen altında ayrı release betiği de bulunuyor.
 
 Bu araçlar yalnızca derleme komutu değildir: varsayılan davranışlarında dosya değiştirme, `git add -A`, commit ve push bulunabiliyor. Analiz amacıyla çalıştırılmadılar. Mevcut görevde sürüm artırılmadı, APK üretilmedi, commit veya push yapılmadı.
 
@@ -446,7 +446,7 @@ Aşağıdaki maddeler bu görevde düzeltilmedi. Öncelikler, gözlenen yapını
 
 ### B10 — Orta: Üretim sertifikası sürekliliği kontrolü kesin değil
 
-**Gözlem:** [Verify-BuiltReleaseApk](D:/projects/vento/vento-unified-safe-release.bat:305) geçerli/debug olmayan imzayı kontrol ediyor; kabul edilmiş önceki üretim sertifikasının parmak iziyle eşitlik karşılaştırması görünmüyor. Android SDK doğrulama araçları bulunmadığında kontrollerin bir bölümü atlanabiliyor.
+**Gözlem:** [Verify-BuiltReleaseApk](D:/projects/vento/build/vento-unified-safe-release.bat) geçerli/debug olmayan imzayı kontrol ediyor; kabul edilmiş önceki üretim sertifikasının parmak iziyle eşitlik karşılaştırması görünmüyor. Android SDK doğrulama araçları bulunmadığında kontrollerin bir bölümü atlanabiliyor.
 
 **Etki:** Farklı ama geçerli bir üretim keystore'u, yanlışlıkla güvenli güncelleme çıktısı olarak değerlendirilebilir. Kaynak yapılandırması kontrolü, dağıtılan geçmiş APK ile sertifika sürekliliğinin kanıtı değildir.
 
@@ -550,7 +550,7 @@ Medya dosyalarının kendisi JSON içine paketlenmiyor; fotoğraf yolu korunmas�
 
 ## 20. Tamamlanan düzeltmeler ve birleşik release doğrulaması
 
-14 Kasım 2026 tarihinde kalan maddeler ele alındı. Kullanıcının sonraki yönlendirmesiyle release sistemi yalnızca `D:/projects/vento/vento-unified-safe-release.bat` üzerinden çalışacak biçimde birleştirildi. Ayrı doğrulayıcı PowerShell dosyaları, eski PowerShell derleme betiği ve iki eski bağımsız release BAT dosyası kaldırıldı. Kontroller BAT'ın gömülü PowerShell bölümündedir; harici `.ps1` üretilmez veya çağrılmaz.
+14 Kasım 2026 tarihinde kalan maddeler ele alındı. Kullanıcının sonraki yönlendirmesiyle release sistemi yalnızca unified safe-release BAT üzerinden çalışacak biçimde birleştirildi (`build.bat` → `build/vento-unified-safe-release.bat`). Ayrı doğrulayıcı PowerShell dosyaları, eski PowerShell derleme betiği ve iki eski bağımsız release BAT dosyası kaldırıldı. Kontroller BAT'ın gömülü PowerShell bölümündedir; harici `.ps1` üretilmez veya çağrılmaz.
 
 ### 20.1. Bulgu bazında sonuç
 
@@ -573,7 +573,7 @@ Medya dosyalarının kendisi JSON içine paketlenmiyor; fotoğraf yolu korunmas�
 Üretim ve doğrulama doğrudan şu komutla yapıldı:
 
 ```powershell
-.\vento-unified-safe-release.bat --both --pos-version 2.8.5+26 --keygen-version 1.1.3+5 --no-open --no-git
+.\build.bat --both --pos-version 2.8.5+26 --keygen-version 1.1.3+5 --no-open --no-git
 ```
 
 | Uygulama | Sonuç |
@@ -596,7 +596,7 @@ Keygen APK SHA-256: `b8ade66a0d06aa371fd1a37620b66e2ff8acc52134367c8233a6fe1de31
 
 ### 20.3. Korunan sınırlar
 
-- Kullanım kılavuzu [release.md](D:/projects/vento/release.md) içinde güncellendi. Bir sonraki normal release için `vento-unified-safe-release.bat --both --no-open` yeterlidir; sertifika, sürüm, test veya paket doğrulaması atlanamaz.
+- Kullanım kılavuzu [release.md](D:/projects/vento/release.md) içinde güncellendi. Bir sonraki normal release için `build.bat --both --no-open` yeterlidir; sertifika, sürüm, test veya paket doğrulaması atlanamaz. Adım logları `build/logs/` altındadır (yalnızca son çalıştırma).
 - Varsayılan Git davranışı değişiklik yapmamaktır. Bu çalışmada commit veya push yapılmadı. Git işlemi gelecekte ancak `--commit`, `--push` veya yerel commit anlamındaki `--no-push` ile istenir.
 - Git tarafından izlenmiş `key.properties`, üretim keystore'ları ve özel seed JSON'u dosya sisteminden silinmeden indeksten çıkarıldı. İmza dosyaları yerinde duruyor ve gerçek derlemede kullanıldı. Bu kaldırmalar indeks üzerinde bekliyor; henüz commit edilmedi.
 - Eski commit'lerde veya daha önce yayımlanmış APK'larda bulunmuş sırlar bu işlemle geçmişten silinmiş olmaz. Git geçmişi yeniden yazılmadı, üretim lisans anahtarları döndürülmedi. Anahtar döndürme ayrı bir geçiş tasarımı gerektirir; mevcut saha lisansları korunmuştur.

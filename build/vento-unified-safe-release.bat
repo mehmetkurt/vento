@@ -154,24 +154,120 @@ function Invoke-LoggedCommand {
     return [int]$exitCode
 }
 
-function Read-TimedKey([string]$PromptPrefix, [int]$Seconds = 6) {
-    $SelectedKey =$null
-    if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
-        for ($sec =$Seconds; $sec -gt 0; $sec--) {
-            Write-Host "`r  $PromptPrefix ($sec sn)... " -NoNewline -ForegroundColor Cyan
-            for ($tick = 0; $tick -lt 10; $tick++) {
-                if ([Console]::KeyAvailable) {
-                    $KeyInfo = [Console]::ReadKey($true)
-                    $SelectedKey = if ($KeyInfo.Key -eq [ConsoleKey]::Enter) { "ENTER" } else { $KeyInfo.KeyChar.ToString().ToUpperInvariant() }
-                    break
-                }
-                Start-Sleep -Milliseconds 100
-            }
-            if ($null -ne $SelectedKey) { break }
-        }
-        Write-Host ""
+function Clear-ConsoleMenuLines([int]$StartTop, [int]$LineCount) {
+    $width = [Math]::Max(1, [Console]::WindowWidth - 1)
+    $blank = (' ' * $width)
+    $maxTop = [Console]::BufferHeight - 1
+    for ($i = 0; $i -lt $LineCount; $i++) {
+        $row = $StartTop + $i
+        if ($row -gt $maxTop) { break }
+        [Console]::SetCursorPosition(0, $row)
+        [Console]::Write($blank)
     }
-    return $SelectedKey
+}
+
+function Read-ConsoleMenu {
+    param(
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][object[]]$Items,
+        [int]$DefaultIndex = 0,
+        [string]$Footer = 'Ok tuslari ile gezinin, Enter ile onaylayin.',
+        [switch]$AllowCancel
+    )
+    if ($null -eq $Items -or $Items.Count -eq 0) {
+        throw 'Read-ConsoleMenu: secenek listesi bos olamaz.'
+    }
+    $safeDefault = [Math]::Max(0, [Math]::Min($DefaultIndex, $Items.Count - 1))
+    if (-not ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected)) {
+        return [string]$Items[$safeDefault].Id
+    }
+
+    $index = $safeDefault
+    $headerLines = 2
+    $footerLines = if ([string]::IsNullOrWhiteSpace($Footer)) { 1 } else { 2 }
+    $lineCount = $headerLines + $Items.Count + $footerLines
+    for ($i = 0; $i -lt $lineCount; $i++) { Write-Host '' }
+    $startTop = [Console]::CursorTop - $lineCount
+    if ($startTop -lt 0) { $startTop = 0 }
+    $prevCursorVisible = $true
+    try { $prevCursorVisible = [Console]::CursorVisible } catch { $prevCursorVisible = $true }
+    try {
+        try { [Console]::CursorVisible = $false } catch { }
+        while ($true) {
+            Clear-ConsoleMenuLines -StartTop $startTop -LineCount $lineCount
+            [Console]::SetCursorPosition(0, $startTop)
+            Write-Host "  $Title" -ForegroundColor Yellow
+            Write-Host ''
+            for ($i = 0; $i -lt $Items.Count; $i++) {
+                $text = [string]$Items[$i].Text
+                if ($i -eq $index) {
+                    Write-Host ("  > " + $text) -ForegroundColor Black -BackgroundColor Cyan
+                } else {
+                    Write-Host ("    " + $text) -ForegroundColor Gray
+                }
+            }
+            if (-not [string]::IsNullOrWhiteSpace($Footer)) {
+                Write-Host ''
+                $footerText = $Footer
+                if ($AllowCancel) { $footerText = $footerText + '  [Q] Iptal' }
+                Write-Host ("  " + $footerText) -ForegroundColor DarkGray
+            }
+
+            $key = [Console]::ReadKey($true)
+            switch ($key.Key) {
+                ([ConsoleKey]::UpArrow) {
+                    $index = ($index - 1 + $Items.Count) % $Items.Count
+                    continue
+                }
+                ([ConsoleKey]::DownArrow) {
+                    $index = ($index + 1) % $Items.Count
+                    continue
+                }
+                ([ConsoleKey]::Home) {
+                    $index = 0
+                    continue
+                }
+                ([ConsoleKey]::End) {
+                    $index = $Items.Count - 1
+                    continue
+                }
+                ([ConsoleKey]::Enter) {
+                    Clear-ConsoleMenuLines -StartTop $startTop -LineCount $lineCount
+                    [Console]::SetCursorPosition(0, $startTop)
+                    Write-Host ("  Secilen: " + [string]$Items[$index].Text) -ForegroundColor Green
+                    return [string]$Items[$index].Id
+                }
+                ([ConsoleKey]::Escape) {
+                    if ($AllowCancel) {
+                        Clear-ConsoleMenuLines -StartTop $startTop -LineCount $lineCount
+                        [Console]::SetCursorPosition(0, $startTop)
+                        Write-Host '  Islem kullanici tarafindan iptal edildi.' -ForegroundColor Yellow
+                        return 'CANCEL'
+                    }
+                    continue
+                }
+                default {
+                    $ch = $key.KeyChar.ToString()
+                    if ($AllowCancel -and ($ch -eq 'q' -or $ch -eq 'Q')) {
+                        Clear-ConsoleMenuLines -StartTop $startTop -LineCount $lineCount
+                        [Console]::SetCursorPosition(0, $startTop)
+                        Write-Host '  Islem kullanici tarafindan iptal edildi.' -ForegroundColor Yellow
+                        return 'CANCEL'
+                    }
+                    $hotkey = $ch.ToUpperInvariant()
+                    for ($i = 0; $i -lt $Items.Count; $i++) {
+                        $itemHotkey = [string]$Items[$i].Hotkey
+                        if (-not [string]::IsNullOrWhiteSpace($itemHotkey) -and $itemHotkey.ToUpperInvariant() -eq $hotkey) {
+                            $index = $i
+                            break
+                        }
+                    }
+                }
+            }
+        }
+    } finally {
+        try { [Console]::CursorVisible = $prevCursorVisible } catch { }
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -333,21 +429,31 @@ if (-not $PosRoot -and -not $KeygenRoot) {
 if (-not $TargetMode -and ($VerifyOnly -or $SelfTest)) { $TargetMode = "BOTH" }
 if (-not $TargetMode) {
     Write-Host ""
-    Write-Host "  Hangi uygulamayi derlemek ve yayinlamak istiyorsunuz?" -ForegroundColor Yellow
-    Write-Host "    [1] Sadece VentoPOS        (Musteri Saha Uygulamasi)" -ForegroundColor White
-    Write-Host "    [2] Sadece VentoPOS_Keygen (Yonetici Lisans Uretici)" -ForegroundColor White
-    Write-Host "    [3] Her Ikisini Birden     (VentoPOS + VentoPOS_Keygen) [Varsayilan - Enter]" -ForegroundColor Green
-    Write-Host "    [Q] Iptal / Cikis" -ForegroundColor DarkGray
-
-    $MenuChoice = Read-TimedKey -PromptPrefix "Seciminiz [1/2/3, Enter=3]" -Seconds 8
+    $appItems = @(
+        [pscustomobject]@{ Id = 'POS'; Hotkey = '1'; Text = '[1] Sadece VentoPOS        (Musteri Saha Uygulamasi)' }
+        [pscustomobject]@{ Id = 'KEYGEN'; Hotkey = '2'; Text = '[2] Sadece VentoPOS_Keygen (Yonetici Lisans Uretici)' }
+        [pscustomobject]@{ Id = 'BOTH'; Hotkey = '3'; Text = '[3] Her Ikisini Birden     (VentoPOS + VentoPOS_Keygen)' }
+    )
+    $appDefault = 2
+    if (-not ($PosRoot -and $KeygenRoot)) {
+        if ($PosRoot) { $appDefault = 0 }
+        elseif ($KeygenRoot) { $appDefault = 1 }
+    }
+    $MenuChoice = Read-ConsoleMenu `
+        -Title 'Hangi uygulamayi derlemek ve yayinlamak istiyorsunuz?' `
+        -Items $appItems `
+        -DefaultIndex $appDefault `
+        -Footer 'Ok tuslari ile gezinin, Enter ile onaylayin.' `
+        -AllowCancel
     switch ($MenuChoice) {
-        "1" { $TargetMode = "POS" }
-        "2" { $TargetMode = "KEYGEN" }
-        "Q" { Write-Host "  Islem kullanici tarafindan iptal edildi." -ForegroundColor Yellow; exit 0 }
+        'POS' { $TargetMode = 'POS' }
+        'KEYGEN' { $TargetMode = 'KEYGEN' }
+        'BOTH' { $TargetMode = 'BOTH' }
+        'CANCEL' { exit 0 }
         default {
-            if ($PosRoot -and $KeygenRoot) { $TargetMode = "BOTH" }
-            elseif ($PosRoot) { $TargetMode = "POS" }
-            else { $TargetMode = "KEYGEN" }
+            if ($PosRoot -and $KeygenRoot) { $TargetMode = 'BOTH' }
+            elseif ($PosRoot) { $TargetMode = 'POS' }
+            else { $TargetMode = 'KEYGEN' }
         }
     }
 }
@@ -420,14 +526,23 @@ function Select-NextVersionSpec {
 
     Write-Host ""
     Write-Host "  [$AppName] Mevcut Surum : $CurFullSpec  -->  Varsayilan Yeni Surum : $SuggestedPatch" -ForegroundColor Yellow
-    Write-Host "  [Enter] Patch ($SuggestedPatch) | [M] Minor ($SuggestedMinor) | [J] Major ($SuggestedMajor) | [K] Koru ($CurFullSpec) | [O] Ozel Gir" -ForegroundColor Gray
-
-    $Sel = Read-TimedKey -PromptPrefix "[$AppName] Surum secimi icin tuslayin" -Seconds 6
+    $versionItems = @(
+        [pscustomobject]@{ Id = 'PATCH'; Hotkey = 'P'; Text = "[P] Patch  ($SuggestedPatch)" }
+        [pscustomobject]@{ Id = 'MINOR'; Hotkey = 'M'; Text = "[M] Minor  ($SuggestedMinor)" }
+        [pscustomobject]@{ Id = 'MAJOR'; Hotkey = 'J'; Text = "[J] Major  ($SuggestedMajor)" }
+        [pscustomobject]@{ Id = 'KEEP'; Hotkey = 'K'; Text = "[K] Koru   ($CurFullSpec)" }
+        [pscustomobject]@{ Id = 'CUSTOM'; Hotkey = 'O'; Text = '[O] Ozel Gir (X.Y.Z+N)' }
+    )
+    $Sel = Read-ConsoleMenu `
+        -Title "[$AppName] Surum secimi" `
+        -Items $versionItems `
+        -DefaultIndex 0 `
+        -Footer 'Ok tuslari ile gezinin, Enter ile onaylayin.'
     switch ($Sel) {
-        "M" { return $SuggestedMinor }
-        "J" { return $SuggestedMajor }
-        "K" { return $CurFullSpec }
-        "O" {
+        'MINOR' { return $SuggestedMinor }
+        'MAJOR' { return $SuggestedMajor }
+        'KEEP' { return $CurFullSpec }
+        'CUSTOM' {
             $CustomInput = (Read-Host "  [$AppName] Yeni surumu girin (X.Y.Z+N)").Trim()
             if ($CustomInput -notmatch '^\d+\.\d+\.\d+\+(\d+)$') {
                 Write-FailAndExit "$AppName gecersiz surum formati: $CustomInput"
@@ -648,7 +763,17 @@ function Invoke-ReleaseSelfTest {
     [IO.Directory]::CreateDirectory($testRoot) | Out-Null
     try {
         # Keep version-selection tests non-interactive and independent of workspace Git state.
-        function Read-TimedKey([string]$PromptPrefix, [int]$Seconds = 6) { return 'ENTER' }
+        function Read-ConsoleMenu {
+            param(
+                [Parameter(Mandatory = $true)][string]$Title,
+                [Parameter(Mandatory = $true)][object[]]$Items,
+                [int]$DefaultIndex = 0,
+                [string]$Footer = '',
+                [switch]$AllowCancel
+            )
+            $safeDefault = [Math]::Max(0, [Math]::Min($DefaultIndex, $Items.Count - 1))
+            return [string]$Items[$safeDefault].Id
+        }
         foreach ($fixture in @(
             @{ Name = 'VentoPOS'; Head = '2.8.4+25'; Current = '2.8.5+26'; Previous = 26; Next = '2.8.6+27' },
             @{ Name = 'VentoPOS_Keygen'; Head = '1.1.2+4'; Current = '1.1.3+5'; Previous = 5; Next = '1.1.4+6' }

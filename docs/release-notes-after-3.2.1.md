@@ -1,7 +1,7 @@
 # VentoPOS Sürüm Notları — 3.2.1+73 sonrası
 
-**Şu anki sürüm:** VentoPOS **3.2.2 (build 75)** — lokal `pubspec.yaml` / `AppInfoConstants`  
-**Nereden beri:** **3.2.1 (build 73)** saha release’inden sonra (eski 3.1.2→3.2.1 kümülatif notlar kaldırıldı)  
+**Şu anki sürüm:** VentoPOS **3.2.1 (build 73)** — master `pubspec.yaml` / `AppInfoConstants` pin (`21c1998`)  
+**Kapsam:** **3.2.1+73 sonrası UI** (eski 3.1.2→3.2.1 kümülatif notlar kaldırıldı). Saha APK aynı pin veya bir sonraki build.  
 **Tarih:** 24 Kasım 2026  
 **Kimler için:** Fason / fabrika hesabı bakan saha ve ofis ekipleri  
 **Kod ucu:** umbrella `main` `c372504` · ventoPOS `master` `21c1998`
@@ -40,5 +40,6 @@
 
 ## Güncelleme notu
 
-- Bu notlar **yalnızca 3.2.1+73 sonrasını** kapsar; Soft UI marka / rota / arayan kimliği vb. eski kümülatif maddeler buraya taşınmadı.
+- Bu notlar **yalnızca 3.2.1+73 sonrası UI**’dir; Soft UI marka / rota / arayan kimliği vb. eski kümülatif maddeler buraya taşınmadı.
+- Saha APK **aynı 3.2.1+73 pin** ile veya bir sonraki build ile gelir.
 - Üzerine yazarak güncelleme yolu aynı; lisans ve veri bozulmaz.

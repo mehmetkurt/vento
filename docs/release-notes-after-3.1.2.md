@@ -1,10 +1,10 @@
 # VentoPOS Sürüm Notları — 3.1.2 sonrası (güncel)
 
-**Şu anki sürüm:** VentoPOS **3.1.10 (build 71)**  
+**Şu anki sürüm:** VentoPOS **3.2.1 (build 73)**  
 **Nereden beri:** 3.1.2 (build 52)  
 **Tarih:** 24 Kasım 2026  
 **Kimler için:** Sahada telefonla çalışan ekipler, ofis / kasa / rapor bakışı  
-**Kod ucu:** umbrella `main` · ventoPOS `master` `05d1d8b` (şema **v37**) · sürüm: lokal `pubspec.yaml` + `AppInfoConstants` (`3.1.10+71`)
+**Kod ucu:** umbrella `main` · ventoPOS `master` `3d0f563` (şema **v37**) · sürüm: lokal `pubspec.yaml` + `AppInfoConstants` (`3.2.1+73`) · APK `VentoPOS-v3.2.1-build73-release.apk`
 
 ---
 
@@ -106,7 +106,7 @@ Uygulama hem daha ferah görünüyor hem günlük işi hızlandıracak şekilde 
 
 ## Sahada dikkat edilecekler
 
-1. Kurulum sonrası uygulama bilgisinde **3.1.10 (71)** görünmeli.
+1. Kurulum sonrası uygulama bilgisinde **3.2.1 (73)** görünmeli.
 2. Gerçek saha kurulumunda «Demo Veri Yükle» **kapalıdır** — müşteri cihazında demo menüsü olmamalı.
 3. İade önekini tek harf tutun; ayara `#` yazmayın.
 4. Firma ayarında sorgu taban adresi dolu olsun (ör. `https://sorgu.altigenhaliyikama.com`).
@@ -127,4 +127,4 @@ Saha için Keygen sürümü: **1.1.6 (build 8)** (imza anahtarı yalnızca telef
 ## Dokümantasyon (ofis / geliştirme)
 
 - Teknik borç tam analizi umbrella `docs/tech-debt-full-analysis.md` altında aynalanır.
-- Bu uca kadar test paketi yeşil doğrulanmıştır (ventoPOS `05d1d8b` / şema v37).
+- Bu uca kadar test paketi yeşil doğrulanmıştır (ventoPOS `3d0f563` / şema v37).

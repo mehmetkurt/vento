@@ -1,15 +1,16 @@
 # VentoPOS Sürüm Notları — 3.1.2 sonrası (güncel)
 
-**Şu anki sürüm:** VentoPOS **3.1.9 (build 70)**  
+**Şu anki sürüm:** VentoPOS **3.1.8 (build 64)**  
 **Nereden beri:** 3.1.2 (build 52)  
 **Tarih:** 24 Kasım 2026  
-**Kimler için:** Sahada telefonla çalışan ekipler, ofis / kasa / rapor bakışı
+**Kimler için:** Sahada telefonla çalışan ekipler, ofis / kasa / rapor bakışı  
+**Kod ucu:** umbrella `main` · ventoPOS `master` `05d1d8b` (şema **v37**)
 
 ---
 
 ## Kısa özet
 
-Uygulama hem daha ferah görünüyor hem günlük işi hızlandıracak şekilde düzenlendi. Ekranlar Soft UI ile yumuşadı; birden fazla marka (firma adı) tek telefonda yönetilebiliyor; rota, teslimat WhatsApp’ı, fason borç ve adres bakımı daha net. Eski telefonlara üzerine yazarak güncelleme yolu aynı; mevcut lisanslar bozulmaz.
+Uygulama hem daha ferah görünüyor hem günlük işi hızlandıracak şekilde düzenlendi. Ekranlar Soft UI ile yumuşadı; birden fazla marka (firma adı) tek telefonda yönetilebiliyor; rota, teslimat WhatsApp’ı, fason borç ve adres bakımı daha net. İleri tarihli alım / teslim / randevu hatırlatmalarında **kaç gün önce** ve **kaç kez** ayarı eklendi. Eski telefonlara üzerine yazarak güncelleme yolu aynı; mevcut lisanslar bozulmaz.
 
 ---
 
@@ -86,8 +87,12 @@ Uygulama hem daha ferah görünüyor hem günlük işi hızlandıracak şekilde 
 
 ## Hatırlatmalar
 
-- Vadesi gelen her hatırlatma için ayrı bildirim gider (birinin diğerini ezmesi azaltıldı).
+- Vadesi gelen her hatırlatma için ayrı bildirim gider; uygulama yeniden açılınca aynı hatırlatmanın peş peşe yağması azaltıldı.
 - Üst bardaki zilden Hatırlatmalar ekranına hızlı geçiş.
+- **İleri tarihli** alım, teslim ve yerinde randevu hatırlatmalarında:
+  - **Önceden** — olaydan kaç gün / saat önce bildirim başlasın (varsayılan: 1 gün önce).
+  - **Sonlu / Sürekli** — Sonlu seçilirse **kaç kez** bildirilsin (varsayılan: 3 kez); Sürekli seçilirse iş bitene kadar aralıklarla devam eder.
+- Bu ayarlar Hatırlatmalar → ilgili modül satırından düzenlenir (şema v37; üzerine yazarak güncellemede otomatik gelir).
 
 ---
 
@@ -101,7 +106,7 @@ Uygulama hem daha ferah görünüyor hem günlük işi hızlandıracak şekilde 
 
 ## Sahada dikkat edilecekler
 
-1. Kurulum sonrası uygulama bilgisinde **3.1.9 (70)** görünmeli.
+1. Kurulum sonrası uygulama bilgisinde **3.1.8 (64)** görünmeli.
 2. Gerçek saha kurulumunda «Demo Veri Yükle» **kapalıdır** — müşteri cihazında demo menüsü olmamalı.
 3. İade önekini tek harf tutun; ayara `#` yazmayın.
 4. Firma ayarında sorgu taban adresi dolu olsun (ör. `https://sorgu.altigenhaliyikama.com`).
@@ -109,9 +114,17 @@ Uygulama hem daha ferah görünüyor hem günlük işi hızlandıracak şekilde 
 6. Rota başlamıyorsa araç yük listesini tamamlayın.
 7. Teslim sonrası WhatsApp paneli bilerek zorunludur; «Şimdi Değil / Kapat» ile kapatıp işe devam edebilirsiniz.
 8. Müşteriye verdiğiniz sorgu linkinde `#` olmamalı (`…/status/İ2026` doğru).
+9. İleri tarih hatırlatmada «Sonlu» + «kaç kez» doldurulmazsa varsayılan **3 kez** kullanılır.
 
 ---
 
 ## Keygen
 
 Saha için Keygen sürümü: **1.1.5 (build 7)** (imza anahtarı yalnızca telefonun güvenli deposunda).
+
+---
+
+## Dokümantasyon (ofis / geliştirme)
+
+- Teknik borç tam analizi umbrella `docs/tech-debt-full-analysis.md` altında aynalanır.
+- Bu uca kadar test paketi yeşil doğrulanmıştır (ventoPOS `05d1d8b` / şema v37).

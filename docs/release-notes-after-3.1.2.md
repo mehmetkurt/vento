@@ -4,22 +4,24 @@
 **Nereden beri:** 3.1.2 (build 52)  
 **Tarih:** 24 Kasım 2026  
 **Kimler için:** Sahada telefonla çalışan ekipler, ofis / kasa / rapor bakışı  
-**Kod ucu:** umbrella `main` · ventoPOS `master` `3d0f563` (şema **v37**) · sürüm: lokal `pubspec.yaml` + `AppInfoConstants` (`3.2.1+73`) · APK `VentoPOS-v3.2.1-build73-release.apk`
+**Kod ucu:** umbrella `main` · ventoPOS `master` `c3db9f5` (şema **v37**) · sürüm: lokal `pubspec.yaml` + `AppInfoConstants` (`3.2.1+73`) · APK `VentoPOS-v3.2.1-build73-release.apk`
 
 ---
 
 ## Kısa özet
 
-Uygulama hem daha ferah görünüyor hem günlük işi hızlandıracak şekilde düzenlendi. Ekranlar Soft UI ile yumuşadı; birden fazla marka (firma adı) tek telefonda yönetilebiliyor; rota, teslimat WhatsApp’ı, fason borç ve adres bakımı daha net. İleri tarihli alım / teslim / randevu hatırlatmalarında **kaç gün önce** ve **kaç kez** ayarı eklendi. Eski telefonlara üzerine yazarak güncelleme yolu aynı; mevcut lisanslar bozulmaz.
+Uygulama hem daha ferah görünüyor hem günlük işi hızlandıracak şekilde düzenlendi. Ekranlar Soft UI ile yumuşadı; birden fazla marka (firma adı) tek telefonda yönetilebiliyor; rota, teslimat WhatsApp’ı, fason borç ve adres bakımı daha net. İleri tarihli alım / teslim / randevu hatırlatmalarında **kaç gün önce** ve **kaç kez** ayarı eklendi. Haritada kayıtlı konum (iğne) korunur; rota Google Maps’te önce bu konuma gider. Gelen aramada borç ve «kaç gündür bekliyor» bilgisi düzeldi. Eski telefonlara üzerine yazarak güncelleme yolu aynı; mevcut lisanslar bozulmaz.
 
 ---
 
-## Görünüm
+## Görünüm (Soft UI)
 
 - Üst bar marka mavisi; yazılar ve ikonlar beyaz.
 - Yazılar daha okunaklı; kartlar yumuşak köşeli ve sade gölgeli.
 - Ana sayfa, sipariş / servis listeleri, formlar, rota ve ayarlar aynı yumuşak görünüme çekildi.
 - Üst barda yazıcı, senkron ve ayarlar artık kısa ikonlar; bekleyen hatırlatma varsa zil üzerinde sayı görünür.
+- Hatırlatmalar listesi ve detay ekranı da Soft UI ile uyumlu; türüne göre hızlı işlemler görünür.
+- Rota durak kartları (daraltılmış) köşelerde taşmadan, Soft UI yuvarlaklığıyla kesilir.
 
 ---
 
@@ -50,6 +52,23 @@ Uygulama hem daha ferah görünüyor hem günlük işi hızlandıracak şekilde 
 - Aynı anda **yalnızca bir aktif rota** olabilir.
 - Aktif rota ve durak kartları daraltılıp açılabilir; duraklarda ara / doğrudan WhatsApp kısayolları vardır.
 - Durak sırasını sürükleyerek veya yukarı-aşağı ile değiştirebilirsiniz; elle verdiğiniz sıra korunur.
+- Durak kartlarının üst / alt şeritleri Soft UI yuvarlak köşeye uyumlu kesilir (keskin kutu taşması yok).
+- Kayıtlı konum (iğne) varsa Google Maps rota linki **önce bu konuma** gider; adres yazısından tahmin etmeye çalışmaz.
+
+---
+
+## Konum / GPS ve Harita
+
+- Adres formunda **«Bulunduğum Konumu Al»** ile alınan enlem / boylam kayda yazılır ve korunur.
+- Daha sonra sadece metin adresi düzeltilse bile mevcut iğne silinmez / üzerine yazılmaz.
+- Rota ve Maps açılışlarında kayıtlı iğne varsa o tercih edilir (daha doğru nokta).
+
+---
+
+## Arayan kimliği (gelen arama ekranı)
+
+- **Borç** etiketi yalnızca gerçekten teslim edilmiş ve ödenmemiş siparişler için çıkar; atölyede / yıkamada bekleyen sipariş tutarı artık borç gibi gösterilmez.
+- «Kaç gündür bekliyor» sayısı düzeldi — eskiden bazen saçma yüksek gün (ör. on binlerce gün) görünebiliyordu; artık makul gün sayısı yazılır.
 
 ---
 
@@ -57,7 +76,8 @@ Uygulama hem daha ferah görünüyor hem günlük işi hızlandıracak şekilde 
 
 - İade siparişleri fasona **yıkamaya gidebilir**; varsayılan olarak fason **borcuna yazılmaz** (0 TL).
 - İsterseniz «İadeleri fason borcuna dahil et» ile borca ekleyebilirsiniz.
-- Fabrika kartlarında borç / m² özetinde **«İadeler hariç»** yazısı görünür; iade adedi ayrı bilgi şeridinde durur.
+- Fabrika kartlarında borç / m² özetinde **«İadeler hariç»** yazısı görünür; iade adedi ve m² ayrı bilgi şeridinde durur.
+- Yalnızca yıkama için giden iadeler, fabrika borç m² hesabına karışmaz (borç şişmez).
 
 ---
 
@@ -89,10 +109,11 @@ Uygulama hem daha ferah görünüyor hem günlük işi hızlandıracak şekilde 
 
 - Vadesi gelen her hatırlatma için ayrı bildirim gider; uygulama yeniden açılınca aynı hatırlatmanın peş peşe yağması azaltıldı.
 - Üst bardaki zilden Hatırlatmalar ekranına hızlı geçiş.
+- Bildirimden **ertele** (snooze) ve hub’dan yeniden açma daha tutarlı çalışır; ayarlanan aralık sayısı (N kez) korunur.
 - **İleri tarihli** alım, teslim ve yerinde randevu hatırlatmalarında:
   - **Önceden** — olaydan kaç gün / saat önce bildirim başlasın (varsayılan: 1 gün önce).
   - **Sonlu / Sürekli** — Sonlu seçilirse **kaç kez** bildirilsin (varsayılan: 3 kez); Sürekli seçilirse iş bitene kadar aralıklarla devam eder.
-- Bu ayarlar Hatırlatmalar → ilgili modül satırından düzenlenir (şema v37; üzerine yazarak güncellemede otomatik gelir).
+- Bu ayarlar Hatırlatmalar → ilgili modül satırından düzenlenir (üzerine yazarak güncellemede otomatik gelir).
 
 ---
 
@@ -115,6 +136,7 @@ Uygulama hem daha ferah görünüyor hem günlük işi hızlandıracak şekilde 
 7. Teslim sonrası WhatsApp paneli bilerek zorunludur; «Şimdi Değil / Kapat» ile kapatıp işe devam edebilirsiniz.
 8. Müşteriye verdiğiniz sorgu linkinde `#` olmamalı (`…/status/İ2026` doğru).
 9. İleri tarih hatırlatmada «Sonlu» + «kaç kez» doldurulmazsa varsayılan **3 kez** kullanılır.
+10. Gelen aramada yıkamadaki sipariş tutarını borç sanmayın; borç yalnızca teslim + ödenmemiş için çıkar.
 
 ---
 
@@ -127,4 +149,4 @@ Saha için Keygen sürümü: **1.1.6 (build 8)** (imza anahtarı yalnızca telef
 ## Dokümantasyon (ofis / geliştirme)
 
 - Teknik borç tam analizi umbrella `docs/tech-debt-full-analysis.md` altında aynalanır.
-- Bu uca kadar test paketi yeşil doğrulanmıştır (ventoPOS `3d0f563` / şema v37).
+- Bu uca kadar test paketi yeşil doğrulanmıştır (ventoPOS `c3db9f5` / şema v37).

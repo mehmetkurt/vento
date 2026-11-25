@@ -1,45 +1,72 @@
-# VentoPOS Sürüm Notları — 3.2.1+73 sonrası
+# VentoPOS Sürüm Notları — 3.2.1+73 sonrası → 3.2.2 (build 76)
 
-**Şu anki sürüm:** VentoPOS **3.2.1 (build 73)** — master `pubspec.yaml` / `AppInfoConstants` pin (`21c1998`)  
-**Kapsam:** **3.2.1+73 sonrası UI** (eski 3.1.2→3.2.1 kümülatif notlar kaldırıldı). Saha APK aynı pin veya bir sonraki build.  
-**Tarih:** 24 Kasım 2026  
-**Kimler için:** Fason / fabrika hesabı bakan saha ve ofis ekipleri  
-**Kod ucu:** umbrella `main` `c372504` · ventoPOS `master` `21c1998`
+**Şu anki sürüm:** VentoPOS **3.2.2 (build 76)**  
+**Kapsam:** Yalnızca **3.2.1+73 saha build’inden sonra** gelen ürün değişiklikleri (eski 3.1.x kümülatif notlar yok).  
+**Tarih:** 25 Kasım 2026 (Europe/Istanbul)  
+**Kimler için:** Saha operatörleri, ofis, arayan kimliği ve fason hesabı kullanan ekipler  
+**Kod ucu:** umbrella `main` `32cccd1` · ventoPOS `master` `cc54b65`
 
 ---
 
 ## Kısa özet
 
-**3.2.1+73** saha build’inden sonra yalnızca fason ekranları sadeleştirildi. Fabrika listesi Soft UI ile daha net; «Yeni Fabrika» üst bardan kalktı, ekleme yalnızca yuvarlak **+** FAB ile. Fabrika detayında **Halılar** aktarımları güne göre gruplanıp açılıp kapanıyor. İade aktarımları kırmızı çerçeve ve **İade** etiketiyle hemen seçiliyor.
+**3.2.2** ile saha build’i güncellenir. Tam teslimde WhatsApp teşekkür / açık hesap mesajı otomatik açılır. Müşteri adresinde eksik GPS, sipariş çevir / kaydet / etiket sırasında arka planda tamamlanır. İlçe–mahalle kataloğu doğru çekilir; mahalle listesi için ilçe seçimi zorunlu. Arayan kimliğinde sahte borç ve absürt bekleme günü düzelir. Fason listesi Soft UI’ye çekilir; aktarımlar güne göre gruplanır, iadeler kırmızı çerçeveyle seçilir.
+
+---
+
+## Teslimde otomatik WhatsApp
+
+- Sipariş **tamamen** teslim edilince (kısmi teslim değil) WhatsApp otomatik açılır.
+- Ödeme alındıysa teşekkür şablonu; borç / açık hesapsa açık hesap şablonu seçilir.
+- Geçersiz veya silinmiş telefonda mesaj açılmaz; hatırlatma kuyruğuna düşer.
+- Karttaki manuel **«Fiş Mesajı»** aynı yerde durur.
+
+---
+
+## Müşteri GPS (arka plan)
+
+- Adreste enlem/boylam yoksa: **Siparişe Çevir**, **Kaydet** veya **Etiket Bas** sırasında arka planda GPS yazılır.
+- Mevcut pin ezilmez; GPS kapalıysa işlem yine devam eder (kısa uyarı).
+
+---
+
+## Adres / mahalle kataloğu
+
+- Resmi ilçe ve mahalle listesi Türkiye API’den eksiksiz çekilir (ör. Güngören mahalleleri görünür).
+- Mahalle listesi için **ilçe filtresi zorunlu**; rastgele / eksik mahalle karışıklığı azalır.
+
+---
+
+## Arayan kimliği
+
+- **Borç** rozeti yalnızca **teslim edilmiş** ve ödenmemiş siparişlerde görünür; yıkamadaki tutar borç sayılmaz.
+- Bekleme günü doğru hesaplanır (eski ~20.000 gün hatası yok).
 
 ---
 
 ## Fason fabrika listesi (Soft UI)
 
-- Liste başlığı Soft UI ile uyumlu: **«Fason Fabrikalar & Hesaplar»**.
-- Üst bardaki **«Yeni Fabrika»** yazısı / düğmesi kaldırıldı; ekran daha sakin.
-- Yeni fabrika eklemek için yalnızca alttaki **ikon-only FAB** (**+**) kullanılır (tooltip: Yeni Fabrika).
-- «Toplu Gönder» üst barda kaldı; toplu fason gönderimi aynı yerden.
+- Liste başlığı: **«Fason Fabrikalar & Hesaplar»**.
+- Üst bardaki **«Yeni Fabrika»** kaldırıldı; ekleme yalnızca alttaki **+** FAB ile.
+- **«Toplu Gönder»** üst barda kaldı.
 
 ---
 
 ## Fason detay — Halılar (aktarım günü)
 
-- Detaydaki **Halılar** sekmesinde aktarımlar **aktarım gününe** göre gruplanır.
-- Gün satırına dokununca grup **açılır / kapanır** (expand / collapse).
-- Gün satırında özet: sipariş adedi · adet · m² görünür; açınca o güne ait kartlar listelenir.
+- **Halılar** sekmesinde aktarımlar **aktarım gününe** göre gruplanır.
+- Gün satırına dokununca grup açılır / kapanır; özet: sipariş · adet · m².
 
 ---
 
 ## İade kartları
 
-- İade / iade aktarımı kartlarında **kırmızı border** vardır.
-- Kartta **«İade»** (yalnız yıkama ise **«İade · 0 TL»**) etiketi görünür; normal fason halılarla karışmaz.
+- İade aktarımlarında **kırmızı çerçeve** ve **«İade»** / **«İade · 0 TL»** etiketi; normal fasonla karışmaz.
 
 ---
 
 ## Güncelleme notu
 
-- Bu notlar **yalnızca 3.2.1+73 sonrası UI**’dir; Soft UI marka / rota / arayan kimliği vb. eski kümülatif maddeler buraya taşınmadı.
-- Saha APK **aynı 3.2.1+73 pin** ile veya bir sonraki build ile gelir.
-- Üzerine yazarak güncelleme yolu aynı; lisans ve veri bozulmaz.
+- Üzerine yazarak (in-place) güncelleme; lisans ve mevcut veriler bozulmaz.
+- Saha APK adı: `VentoPOS-v3.2.2-build76-release.apk` (build çıktısına göre).
+- Bu notlar **3.2.1+73 sonrası** gelişmeleri kapsar; Soft UI marka / rota / eski kümülatif maddeler buraya taşınmadı.
